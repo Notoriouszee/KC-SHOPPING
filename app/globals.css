@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink-900 antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  ::selection {
+    @apply bg-white text-black;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-1 ring-white ring-offset-2 ring-offset-canvas;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-md border border-line bg-surface-2 shadow-card;
+  }
+
+  /* White tiles, as on the marketplace grid. */
+  .product-card {
+    @apply block bg-white text-neutral-900;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-ink-500;
+  }
+
+  .input {
+    @apply w-full rounded-none border border-line bg-surface-3 px-3.5 py-2.5 text-[15px] text-ink-900
+      placeholder:text-ink-400 focus:border-white focus:outline-none focus:ring-1 focus:ring-white/30
+      disabled:bg-surface;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-[11px] font-semibold uppercase
+      tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-white text-black hover:bg-neutral-200;
+  }
+
+  .btn-secondary {
+    @apply btn border border-white/30 bg-transparent text-white hover:border-white hover:bg-white/5;
+  }
+
+  .btn-ghost {
+    @apply btn text-white/70 hover:text-white;
+  }
+
+  .btn-danger {
+    @apply btn border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20;
+  }
+
+  .display {
+    @apply font-serif font-normal tracking-tight;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.24em] text-white/55;
+  }
+
+  .table {
+    @apply w-full text-left text-sm;
+  }
+
+  .table thead th {
+    @apply border-b border-line px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-500;
+  }
+
+  .table tbody td {
+    @apply border-b border-white/5 px-4 py-3 text-sm text-ink-700 align-top;
+  }
+
+  .table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em];
+  }
+
+  .table-head {
+    @apply px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-500;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-ink-700;
+  }
+
+  .hairline {
+    @apply border-line;
+  }
+}

@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Add product" };
 
 export default async function NewProductPage() {
   const user = await requireUser();
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
 
   return (
     <div>

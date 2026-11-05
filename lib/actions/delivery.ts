@@ -16,7 +16,7 @@ export async function confirmReceivedAction(
 
   try {
     if (!orderId) throw new ValidationError([{ field: "order", message: "Order not found." }]);
-    confirmReceived(orderId, user.id);
+    await confirmReceived(orderId, user.id);
   } catch (error) {
     return failure(error, "We could not confirm that delivery.");
   }
@@ -38,7 +38,7 @@ export async function confirmReceivedByTokenAction(
 
   try {
     if (!token) throw new ValidationError([{ field: "token", message: "Order not found." }]);
-    confirmReceivedByToken(token);
+    await confirmReceivedByToken(token);
   } catch (error) {
     return failure(error, "We could not confirm that delivery.");
   }

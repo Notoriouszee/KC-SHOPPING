@@ -72,15 +72,15 @@ function VisitorTable({ title, rows, grain }: { title: string; rows: VisitorBuck
 }
 
 export default async function AdminHomePage() {
-  const overview = adminOverview();
-  const visitors = visitorTotals();
-  const byDay = visitorSeries("day", 14);
-  const byMonth = visitorSeries("month", 6);
-  const byYear = visitorSeries("year", 5);
-  const pages = topPages(6);
-  const recent = adminPayments({ limit: 6 });
-  const customers = adminCustomers(5);
-  const shops = adminShops(5);
+  const overview = await adminOverview();
+  const visitors = await visitorTotals();
+  const byDay = await visitorSeries("day", 14);
+  const byMonth = await visitorSeries("month", 6);
+  const byYear = await visitorSeries("year", 5);
+  const pages = await topPages(6);
+  const recent = await adminPayments({ limit: 6 });
+  const customers = await adminCustomers(5);
+  const shops = await adminShops(5);
 
   return (
     <div className="space-y-6">

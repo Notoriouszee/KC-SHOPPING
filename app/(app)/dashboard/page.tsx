@@ -19,10 +19,10 @@ export default async function DashboardPage({
   const user = await requireUser();
   const params = await searchParams;
 
-  const stats = orderStats(user.id);
-  const followUpCounts = followUpStats(user.id);
-  const recentOrders = listOrders(user.id, { limit: 6 });
-  const dueFollowUps = listFollowUps(user.id, { status: "open", limit: 5 });
+  const stats = await orderStats(user.id);
+  const followUpCounts = await followUpStats(user.id);
+  const recentOrders = await listOrders(user.id, { limit: 6 });
+  const dueFollowUps = await listFollowUps(user.id, { status: "open", limit: 5 });
 
   return (
     <div>

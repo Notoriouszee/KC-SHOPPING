@@ -34,7 +34,7 @@ export default async function OrderDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const order = getOrderDetail(user.id, id);
+  const order = await getOrderDetail(user.id, id);
   if (!order) notFound();
 
   // Delivery collected on delivery is not part of what the customer transfers.
@@ -43,7 +43,7 @@ export default async function OrderDetailPage({
   const deliveryOnDelivery = order.delivery_fee_on_delivery === 1 && order.delivery_fee_kobo > 0;
   const transitions = ORDER_TRANSITIONS[order.status];
   // Orders placed from a shared product link keep a reference to that product.
-  const sourceProduct = order.product_id ? getProduct(user.id, order.product_id) : null;
+  const sourceProduct = order.product_id ? await getProduct(user.id, order.product_id) : null;
 
   return (
     <div>

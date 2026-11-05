@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       siteHost: new URL(request.url).hostname,
     });
 
-    recordProductView({
+    await recordProductView({
       productId,
       source,
       referrerHost,

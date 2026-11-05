@@ -19,7 +19,10 @@ export default async function AccountPage({
 }) {
   const user = await requireCustomer();
   const params = await searchParams;
-  const orders = listOrdersForBuyer(user.id);
+  const orders = await listOrdersForBuyer(user.id);
+  const withShops = await Promise.all(
+    orders.map(async (order) => ({ order, shop: await getShopProfile(order.seller_id) })),
+  );
 
   return (
     <div>
@@ -53,8 +56,7 @@ export default async function AccountPage({
         </Card>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => {
-            const shop = getShopProfile(order.seller_id);
+          {withShops.map(({ order, shop }) => {
             const due = amountDueOnline(order);
             const remaining = Math.max(0, due - order.paid_kobo);
             const paid = order.payment_status === "paid";

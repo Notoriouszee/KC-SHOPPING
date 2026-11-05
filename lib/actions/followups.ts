@@ -25,7 +25,7 @@ export async function createFollowUpAction(
   const user = await requireUser();
 
   try {
-    createFollowUp(user.id, {
+    await createFollowUp(user.id, {
       title: formText(formData, "title"),
       dueAt: normaliseDue(formText(formData, "dueAt")),
       notes: formText(formData, "notes") || null,
@@ -50,7 +50,7 @@ export async function completeFollowUpAction(formData: FormData): Promise<void> 
   if (!id) return;
 
   try {
-    completeFollowUp(user.id, id);
+    await completeFollowUp(user.id, id);
   } catch (error) {
     console.error("[follow-up complete]", error);
   }
@@ -64,7 +64,7 @@ export async function reopenFollowUpAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = formText(formData, "followUpId");
   if (!id) return;
-  reopenFollowUp(user.id, id);
+  await reopenFollowUp(user.id, id);
   revalidatePath("/follow-ups");
 }
 
@@ -72,6 +72,6 @@ export async function cancelFollowUpAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = formText(formData, "followUpId");
   if (!id) return;
-  cancelFollowUp(user.id, id);
+  await cancelFollowUp(user.id, id);
   revalidatePath("/follow-ups");
 }

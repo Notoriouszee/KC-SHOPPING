@@ -13,15 +13,15 @@ function toSafeUser(row: User): SafeUser {
   return safe;
 }
 
-export function findUserByEmail(email: string): User | null {
-  const row = getDb()
+export async function findUserByEmail(email: string): Promise<User | null> {
+  const row = await (await getDb())
     .prepare("SELECT * FROM users WHERE email = ?")
     .get(email.trim().toLowerCase());
   return plainRow<User>(row);
 }
 
-export function findUserById(id: string): User | null {
-  const row = getDb().prepare("SELECT * FROM users WHERE id = ?").get(id);
+export async function findUserById(id: string): Promise<User | null> {
+  const row = await (await getDb()).prepare("SELECT * FROM users WHERE id = ?").get(id);
   return plainRow<User>(row);
 }
 
@@ -43,7 +43,7 @@ export async function signUp(
   input: SignUpInput,
 ): Promise<{ user: SafeUser; token: string } | { error: string }> {
   const email = input.email.trim().toLowerCase();
-  if (findUserByEmail(email)) {
+  if (await findUserByEmail(email)) {
     return { error: "An account with that email already exists. Try signing in." };
   }
 
@@ -61,7 +61,7 @@ export async function signUp(
   const passwordHash = await hashPassword(input.password);
   const createdAt = nowIso();
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO users (id, email, password_hash, owner_name, business_name, phone, role, account_type, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'seller', ?, ?, ?)`,
@@ -78,15 +78,15 @@ export async function signUp(
       createdAt,
     );
 
-  const user = findUserById(id);
+  const user = await findUserById(id);
   if (!user) return { error: "Could not create your account. Please try again." };
 
   // Every seller gets a working public shop link immediately; customers do not.
   if (accountType === "seller") {
-    assignInitialSlug(user.id, businessName);
+    await assignInitialSlug(user.id, businessName);
   }
 
-  const token = createSession(user.id);
+  const token = await createSession(user.id);
   return { user: toSafeUser(user), token };
 }
 
@@ -94,7 +94,7 @@ export async function authenticate(
   email: string,
   password: string,
 ): Promise<{ user: SafeUser; token: string } | null> {
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user) {
     // Constant-ish work so a missing account is not obviously faster.
     await verifyPassword(password, `scrypt$${"0".repeat(32)}$${"0".repeat(128)}`);
@@ -102,39 +102,39 @@ export async function authenticate(
   }
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return null;
-  return { user: toSafeUser(user), token: createSession(user.id) };
+  return { user: toSafeUser(user), token: await createSession(user.id) };
 }
 
-export function createSession(userId: string): string {
+export async function createSession(userId: string): Promise<string> {
   const token = `${newId()}${newId()}`.replace(/-/g, "");
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  getDb()
+  await (await getDb())
     .prepare("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
     .run(token, userId, nowIso(), expires.toISOString());
   return token;
 }
 
-export function destroySession(token: string): void {
-  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+export async function destroySession(token: string): Promise<void> {
+  await (await getDb()).prepare("DELETE FROM sessions WHERE token = ?").run(token);
 }
 
-export function userForSessionToken(token: string): SafeUser | null {
-  const row = getDb()
+export async function userForSessionToken(token: string): Promise<SafeUser | null> {
+  const row = await (await getDb())
     .prepare(
       `SELECT u.* FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     )
-    .get(token, nowIso());
+    .get<User>(token, nowIso());
   if (!row) return null;
   return toSafeUser(plainRow<User>(row)!);
 }
 
-export function updateProfile(
+export async function updateProfile(
   userId: string,
   input: { ownerName: string; businessName: string; phone?: string | null },
-): void {
-  getDb()
+): Promise<void> {
+  await (await getDb())
     .prepare(
       `UPDATE users SET owner_name = ?, business_name = ?, phone = ?, updated_at = ? WHERE id = ?`,
     )

@@ -25,9 +25,9 @@ export default async function FollowUpsPage({
   const params = await searchParams;
   const tab: Tab = params.tab === "done" ? "done" : params.tab === "all" ? "all" : "open";
 
-  const followUps = listFollowUps(user.id, { status: tab, limit: 300 });
-  const stats = followUpStats(user.id);
-  const customers = listCustomers(user.id, { limit: 300 }).map((customer) => ({
+  const followUps = await listFollowUps(user.id, { status: tab, limit: 300 });
+  const stats = await followUpStats(user.id);
+  const customers = (await listCustomers(user.id, { limit: 300 })).map((customer) => ({
     id: customer.id,
     name: customer.name,
     phone: customer.phone,

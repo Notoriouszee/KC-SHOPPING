@@ -12,6 +12,20 @@ import type { NextConfig } from "next";
  * requests to HTTPS when the app is served over plain HTTP (as it is locally),
  * breaking the page. HSTS covers the production case.
  */
+
+// Images are served from Supabase Storage in production, which is a different
+// origin from the app. Allow that specific project (and the supabase.co domain
+// generally, so a project ref change does not silently break images).
+const supabaseOrigin = (
+  process.env.SUPABASE_URL ??
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  ""
+).replace(/\/+$/, "");
+
+const imageOrigins = ["'self'", "data:", "blob:", "https://*.supabase.co", supabaseOrigin]
+  .filter(Boolean)
+  .join(" ");
+
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
@@ -19,7 +33,7 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      `img-src ${imageOrigins}`,
       "font-src 'self' data:",
       "connect-src 'self'",
       "media-src 'self'",
@@ -44,9 +58,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // The local data layer uses Node's built-in SQLite module. Keep it out of the
-  // bundler's module graph so server components can open the database directly.
-  serverExternalPackages: ["node:sqlite"],
+  // Native/server-only packages must not be bundled:
+  //  - `pg` drives the Postgres backend in production.
+  //  - `node:sqlite` is only loaded when running the local SQLite backend.
+  serverExternalPackages: ["pg", "node:sqlite", "@supabase/supabase-js"],
   experimental: {
     serverActions: {
       // Product photo uploads arrive through server actions.

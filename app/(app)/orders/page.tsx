@@ -17,7 +17,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const status = params.status === "open" ? "open" : isOrderStatus(params.status) ? params.status : "all";
   const query = (params.q ?? "").trim();
 
-  const orders = listOrders(user.id, {
+  const orders = await listOrders(user.id, {
     status,
     query: query || undefined,
     paymentStatus:

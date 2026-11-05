@@ -35,19 +35,19 @@ function addDays(days: number, from = new Date()): string {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export function getSubscription(sellerId: string): Subscription | null {
+export async function getSubscription(sellerId: string): Promise<Subscription | null> {
   return plainRow<Subscription>(
-    getDb().prepare("SELECT * FROM seller_subscriptions WHERE seller_id = ?").get(sellerId),
+    await (await getDb()).prepare("SELECT * FROM seller_subscriptions WHERE seller_id = ?").get(sellerId),
   );
 }
 
 /** Creates the trial row on first use, so older accounts are never locked out. */
-export function ensureSubscription(sellerId: string): Subscription {
-  const existing = getSubscription(sellerId);
+export async function ensureSubscription(sellerId: string): Promise<Subscription> {
+  const existing = await getSubscription(sellerId);
   if (existing) return existing;
 
   const timestamp = nowIso();
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO seller_subscriptions
          (seller_id, plan, status, trial_ends_at, amount_kobo, created_at, updated_at)
@@ -55,7 +55,7 @@ export function ensureSubscription(sellerId: string): Subscription {
     )
     .run(sellerId, addDays(TRIAL_DAYS), planAmountKobo(), timestamp, timestamp);
 
-  return getSubscription(sellerId)!;
+  return (await getSubscription(sellerId))!;
 }
 
 export type SubscriptionState = {
@@ -109,19 +109,19 @@ export function evaluate(subscription: Subscription, now = Date.now()): Subscrip
 }
 
 /** The state for a seller, creating their trial if this is the first visit. */
-export function subscriptionState(sellerId: string): SubscriptionState {
-  return evaluate(ensureSubscription(sellerId));
+export async function subscriptionState(sellerId: string): Promise<SubscriptionState> {
+  return evaluate(await ensureSubscription(sellerId));
 }
 
 /**
  * Records a successful payment. Extends from the later of "now" and the current
  * period end, so paying early never loses days.
  */
-export function activateSubscription(
+export async function activateSubscription(
   sellerId: string,
   options: { days?: number; reference: string; amountKobo?: number },
-): Subscription {
-  const existing = ensureSubscription(sellerId);
+): Promise<Subscription> {
+  const existing = await ensureSubscription(sellerId);
   const now = Date.now();
 
   const currentEnd = existing.current_period_end
@@ -135,7 +135,7 @@ export function activateSubscription(
   const periodEnd = new Date(start + days * 86_400_000).toISOString();
   const timestamp = nowIso();
 
-  getDb()
+  await (await getDb())
     .prepare(
       `UPDATE seller_subscriptions
           SET status = 'active',
@@ -155,18 +155,18 @@ export function activateSubscription(
       sellerId,
     );
 
-  return getSubscription(sellerId)!;
+  return (await getSubscription(sellerId))!;
 }
 
-export function cancelSubscription(sellerId: string): Subscription {
-  ensureSubscription(sellerId);
-  getDb()
+export async function cancelSubscription(sellerId: string): Promise<Subscription> {
+  await ensureSubscription(sellerId);
+  await (await getDb())
     .prepare("UPDATE seller_subscriptions SET status = 'cancelled', updated_at = ? WHERE seller_id = ?")
     .run(nowIso(), sellerId);
-  return getSubscription(sellerId)!;
+  return (await getSubscription(sellerId))!;
 }
 
 /** True when the seller may write to their catalogue. */
-export function hasActiveSubscription(sellerId: string): boolean {
-  return subscriptionState(sellerId).active;
+export async function hasActiveSubscription(sellerId: string): Promise<boolean> {
+  return (await subscriptionState(sellerId)).active;
 }

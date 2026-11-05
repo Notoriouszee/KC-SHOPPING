@@ -42,7 +42,7 @@ export async function saveProductAction(
   const user = await requireUser();
 
   // A lapsed seller keeps a readable dashboard, but cannot change the catalogue.
-  const subscription = subscriptionState(user.id);
+  const subscription = await subscriptionState(user.id);
   if (!subscription.active) {
     return {
       error: "Your free month has ended. Subscribe on the Billing page to add or edit products.",
@@ -80,11 +80,11 @@ export async function saveProductAction(
     return { error: "Please fix the highlighted fields.", fieldErrors };
   }
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
 
   // Check the photo budget before writing anything, so a rejected upload cannot
   // leave the product half-saved.
-  const existing = isEdit ? getProduct(user.id, productId) : null;
+  const existing = isEdit ? await getProduct(user.id, productId) : null;
   if (isEdit && !existing) {
     return { error: "That product no longer exists." };
   }
@@ -102,14 +102,14 @@ export async function saveProductAction(
 
   try {
     const product = isEdit
-      ? updateProduct(user.id, productId, {
+      ? await updateProduct(user.id, productId, {
           name,
           priceKobo: priceKobo as number,
           description,
           availability: availabilityRaw as "available" | "out_of_stock",
           publicationStatus: publicationRaw as "draft" | "published",
         })
-      : createProduct(user.id, {
+      : await createProduct(user.id, {
           name,
           priceKobo: priceKobo as number,
           description,
@@ -119,7 +119,7 @@ export async function saveProductAction(
 
     // Remove photos the seller unticked.
     for (const imageId of removals) {
-      const removed = removeImage(user.id, imageId);
+      const removed = await removeImage(user.id, imageId);
       await deleteStoredImage(removed.url);
     }
 
@@ -128,7 +128,7 @@ export async function saveProductAction(
       if ("error" in saved) {
         return { error: saved.error, fieldErrors: { images: saved.error } };
       }
-      addImage(user.id, product.id, {
+      await addImage(user.id, product.id, {
         url: saved.url,
         alt: product.name,
         width: saved.width,
@@ -138,16 +138,16 @@ export async function saveProductAction(
 
     // Optional explicit cover choice.
     const coverId = formText(formData, "coverImage");
-    const refreshed = getProduct(user.id, product.id);
+    const refreshed = await getProduct(user.id, product.id);
     if (coverId && refreshed?.images.some((image) => image.id === coverId)) {
-      setCoverImage(user.id, product.id, coverId);
+      await setCoverImage(user.id, product.id, coverId);
     }
 
     if (shop?.shop_slug) {
       revalidatePath(`/product/${shop.shop_slug}/${product.slug}`);
     }
 
-    const finalProduct = getProduct(user.id, product.id);
+    const finalProduct = await getProduct(user.id, product.id);
     revalidateProductSurfaces(shop?.shop_slug ?? null, product.id);
 
     if (!isEdit) {
@@ -174,12 +174,12 @@ export async function togglePublicationAction(formData: FormData): Promise<void>
   if (!productId || !isPublicationStatus(next)) return;
 
   try {
-    setPublication(user.id, productId, next);
+    await setPublication(user.id, productId, next);
   } catch (error) {
     console.error("[product publish]", error);
   }
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   revalidateProductSurfaces(shop?.shop_slug ?? null, productId);
 }
 
@@ -190,12 +190,12 @@ export async function toggleAvailabilityAction(formData: FormData): Promise<void
   if (!productId || !isAvailability(next)) return;
 
   try {
-    setAvailability(user.id, productId, next);
+    await setAvailability(user.id, productId, next);
   } catch (error) {
     console.error("[product availability]", error);
   }
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   revalidateProductSurfaces(shop?.shop_slug ?? null, productId);
 }
 
@@ -206,12 +206,12 @@ export async function setCoverImageAction(formData: FormData): Promise<void> {
   if (!productId || !imageId) return;
 
   try {
-    setCoverImage(user.id, productId, imageId);
+    await setCoverImage(user.id, productId, imageId);
   } catch (error) {
     console.error("[product cover]", error);
   }
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   revalidateProductSurfaces(shop?.shop_slug ?? null, productId);
 }
 
@@ -222,7 +222,7 @@ export async function deleteProductAction(formData: FormData): Promise<void> {
 
   let urls: string[] = [];
   try {
-    urls = deleteProduct(user.id, productId);
+    urls = await deleteProduct(user.id, productId);
   } catch (error) {
     if (!(error instanceof ValidationError)) console.error("[product delete]", error);
   }
@@ -231,7 +231,7 @@ export async function deleteProductAction(formData: FormData): Promise<void> {
     await deleteStoredImage(url);
   }
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   revalidateProductSurfaces(shop?.shop_slug ?? null);
   redirect("/products?deleted=1");
 }

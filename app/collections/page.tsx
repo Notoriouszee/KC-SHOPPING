@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CollectionsPage() {
   const user = await getCurrentUser();
-  const pieces = listPublicCatalogue(60);
+  const pieces = await listPublicCatalogue(60);
 
   return (
     <div className="min-h-screen bg-black">

@@ -9,7 +9,9 @@ export const metadata: Metadata = { title: "New order" };
 
 export default async function NewOrderPage() {
   const user = await requireUser();
-  const customers = listCustomers(user.id, { limit: 300 }).map((customer) => ({
+  const customers = (
+    await listCustomers(user.id, { limit: 300 })
+  ).map((customer) => ({
     id: customer.id,
     name: customer.name,
     phone: customer.phone,

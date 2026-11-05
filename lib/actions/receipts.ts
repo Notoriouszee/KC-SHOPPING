@@ -30,7 +30,7 @@ export async function uploadReceiptAction(
   let sellerId: string | null = null;
 
   if (token) {
-    const view = getPublicOrderByToken(token);
+    const view = await getPublicOrderByToken(token);
     if (!view || view.order_id !== orderId) {
       return { error: "That order link is no longer valid." };
     }
@@ -40,7 +40,7 @@ export async function uploadReceiptAction(
     if (!user) {
       return { error: "Sign in to upload a receipt." };
     }
-    const order = getOrderForBuyer(user.id, orderId);
+    const order = await getOrderForBuyer(user.id, orderId);
     if (!order) return { error: "We could not find that order." };
     sellerId = order.seller_id;
   }
@@ -54,7 +54,7 @@ export async function uploadReceiptAction(
   if ("error" in saved) return { error: saved.error, fieldErrors: { receipt: saved.error } };
 
   try {
-    attachReceipt(orderId, { url: saved.url, note: note || null });
+    await attachReceipt(orderId, { url: saved.url, note: note || null });
   } catch (error) {
     await deleteStoredImage(saved.url);
     return failure(error, "We could not save that receipt.");
@@ -74,7 +74,7 @@ export async function confirmReceiptAction(formData: FormData): Promise<void> {
   if (!orderId) return;
 
   try {
-    confirmReceipt(user.id, orderId);
+    await confirmReceipt(user.id, orderId);
   } catch (error) {
     if (!(error instanceof ValidationError)) console.error("[confirm receipt]", error);
   }

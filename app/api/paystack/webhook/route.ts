@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   const data = event?.data;
   const sellerId = typeof data?.metadata?.seller_id === "string" ? data.metadata.seller_id : "";
-  const seller = sellerId ? findUserById(sellerId) : null;
+  const seller = sellerId ? await findUserById(sellerId) : null;
 
   if (
     event?.event === "charge.success" &&
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     seller &&
     seller.account_type === "seller"
   ) {
-    activateSubscription(seller.id, {
+    await activateSubscription(seller.id, {
       reference: data.reference,
       amountKobo: Number(data.amount ?? 0),
     });

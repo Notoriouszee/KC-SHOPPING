@@ -26,6 +26,74 @@ customer at `/account`, admin at `/admin`. Sign in with `ada@mystore.ng` (seller
 or `blessing@customer.ng` (customer) — password `orderpilot123` for both. The
 admin account is created by the seed (see “Admin” below).
 
+## Deploying to Vercel
+
+Vercel's filesystem is read-only (only `/tmp` is writable), so the app must not
+create files at runtime. Two switches control that:
+
+| Variable | Values | Effect |
+| --- | --- | --- |
+| `DATA_BACKEND` | `supabase` / `sqlite` | Postgres or the local file. Unset means "Postgres in production, SQLite otherwise". |
+| `STORAGE_BACKEND` | `supabase` / `local` | Uploads to a bucket or to `data/uploads`. Same defaulting rule. |
+
+Production fails loudly rather than falling back: with `NODE_ENV=production` and
+no `SUPABASE_DB_URL` the data layer throws an actionable error, and without
+Supabase Storage the upload path does the same. Nothing silently writes to `/tmp`.
+
+### Required environment variables on Vercel
+
+```
+NEXT_PUBLIC_APP_URL      https://your-domain (or the vercel.app URL)
+DATA_BACKEND             supabase
+STORAGE_BACKEND          supabase
+SUPABASE_URL             https://<ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY  (secret, server-only)
+SUPABASE_DB_URL          postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+PAYSTACK_SECRET_KEY      sk_live_… (or sk_test_… while testing)
+SELLER_PLAN_KOBO         250000
+```
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` is optional: the browser never talks to Supabase
+directly. `PG_POOL_MAX` (default 5) keeps each serverless instance's pool small.
+
+### Applying the schema
+
+```bash
+pnpm db:supabase                       # applies supabase/migrations/*.sql in order
+node --import ./scripts/register.mjs scripts/supabase-check.mjs
+```
+
+The migrations are idempotent and tracked in `_migrations`, so this is safe to
+re-run. `0015_postgres_primary_store.sql` adds the `sessions` table, the
+`profiles.password_hash` column and converts `orders.delivery_fee_on_delivery`
+from boolean to integer (the app stores 0/1).
+
+### Migrating an existing install
+
+```bash
+pnpm db:supabase                                           # schema (idempotent)
+node --import ./scripts/register.mjs scripts/migrate-media.mjs   # files -> Storage
+node --import ./scripts/register.mjs scripts/production-smoke.mjs # end-to-end check
+```
+
+`migrate-media.mjs` uploads anything still referenced as `/media/...` to the
+right bucket and rewrites the URL in the database, so old rows stop pointing at
+files that only existed on a laptop.
+
+`production-smoke.mjs` creates a seller, product, order, payment and subscription
+against Supabase, uploads and re-fetches a real image, then deletes everything it
+made. It is the fastest way to confirm a deployment's environment variables.
+
+### Local development
+
+Nothing changes: `pnpm dev` uses SQLite in `data/` and uploads in `data/uploads`.
+To run locally against Supabase, set `DATA_BACKEND=supabase` and
+`STORAGE_BACKEND=supabase` in `.env.local` (this is what `.env.local` in this
+checkout does, so local behaviour matches production).
+
+`pnpm db:sync` still exists to copy SQLite data into Supabase; it is only useful
+when running locally on the SQLite backend.
+
 ## Seller subscriptions (Paystack)
 
 Every seller gets **one free month**. After that the shop stays visible but the

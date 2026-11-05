@@ -24,7 +24,7 @@ export default async function AdminPaymentsPage({
   const filter = (filters.find((item) => item.key === params.filter)?.key ?? "all") as PaymentFilter;
   const query = (params.q ?? "").trim();
 
-  const rows = adminPayments({ filter, query, limit: 200 });
+  const rows = await adminPayments({ filter, query, limit: 200 });
 
   return (
     <div className="space-y-5">

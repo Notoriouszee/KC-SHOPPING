@@ -19,8 +19,8 @@ export function hashSiteVisitor(ip: string, userAgent: string, date = new Date()
 }
 
 /** Only public, crawlable pages are counted. */
-export function recordSiteVisit(path: string, visitorHash: string): void {
-  getDb()
+export async function recordSiteVisit(path: string, visitorHash: string): Promise<void> {
+  await (await getDb())
     .prepare("INSERT INTO site_visits (id, path, visitor_hash, created_at) VALUES (?, ?, ?, ?)")
     .run(newId(), path.slice(0, 200), visitorHash, nowIso());
 }
@@ -34,8 +34,10 @@ export type VisitorTotals = {
   uniqueThisMonth: number;
 };
 
-function count(sql: string, params: unknown[] = []): number {
-  const row = getDb().prepare(sql).get(...(params as never[])) as { c: number } | undefined;
+async function count(sql: string, params: unknown[] = []): Promise<number> {
+  const row = await (await getDb())
+    .prepare(sql)
+    .get<{ c: number }>(...(params as never[]));
   return Number(row?.c ?? 0);
 }
 
@@ -43,19 +45,19 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export function visitorTotals(): VisitorTotals {
+export async function visitorTotals(): Promise<VisitorTotals> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
   const startOfYear = new Date(startOfDay.getFullYear(), 0, 1);
 
   return {
-    today: count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfDay.toISOString()]),
-    last7Days: count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [isoDaysAgo(7)]),
-    thisMonth: count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfMonth.toISOString()]),
-    thisYear: count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfYear.toISOString()]),
-    allTime: count("SELECT COUNT(*) AS c FROM site_visits"),
-    uniqueThisMonth: count(
+    today: await count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfDay.toISOString()]),
+    last7Days: await count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [isoDaysAgo(7)]),
+    thisMonth: await count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfMonth.toISOString()]),
+    thisYear: await count("SELECT COUNT(*) AS c FROM site_visits WHERE created_at >= ?", [startOfYear.toISOString()]),
+    allTime: await count("SELECT COUNT(*) AS c FROM site_visits"),
+    uniqueThisMonth: await count(
       "SELECT COUNT(DISTINCT visitor_hash) AS c FROM site_visits WHERE created_at >= ?",
       [startOfMonth.toISOString()],
     ),
@@ -69,17 +71,22 @@ export type VisitorBucket = { bucket: string; visits: number; uniqueVisitors: nu
  * works on SQLite; the Postgres adapter will need `to_char` when the driver port
  * lands.
  */
-export function visitorSeries(grain: "day" | "month" | "year", limit: number): VisitorBucket[] {
+export async function visitorSeries(
+  grain: "day" | "month" | "year",
+  limit: number,
+): Promise<VisitorBucket[]> {
   const length = grain === "day" ? 10 : grain === "month" ? 7 : 4;
 
+  // `CAST(... AS TEXT)` works on both backends: SQLite stores the timestamp as
+  // text already, and Postgres has no `substr(timestamptz, …)`.
   return plainRows<VisitorBucket>(
-    getDb()
+    await (await getDb())
       .prepare(
-        `SELECT substr(created_at, 1, ${length}) AS bucket,
+        `SELECT substr(CAST(created_at AS TEXT), 1, ${length}) AS bucket,
                 COUNT(*) AS visits,
                 COUNT(DISTINCT visitor_hash) AS uniqueVisitors
          FROM site_visits
-         GROUP BY bucket
+         GROUP BY substr(CAST(created_at AS TEXT), 1, ${length})
          ORDER BY bucket DESC
          LIMIT ?`,
       )
@@ -92,9 +99,9 @@ export function visitorSeries(grain: "day" | "month" | "year", limit: number): V
 }
 
 /** Visits per page, to see what people actually browse. */
-export function topPages(limit = 8): { path: string; visits: number }[] {
+export async function topPages(limit = 8): Promise<{ path: string; visits: number }[]> {
   return plainRows<{ path: string; visits: number }>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT path, COUNT(*) AS visits FROM site_visits GROUP BY path ORDER BY visits DESC LIMIT ?`,
       )
@@ -102,8 +109,8 @@ export function topPages(limit = 8): { path: string; visits: number }[] {
   ).map((row) => ({ path: String(row.path), visits: Number(row.visits) }));
 }
 
-export function pruneSiteVisits(olderThanDays = 90): number {
+export async function pruneSiteVisits(olderThanDays = 90): Promise<number> {
   const cutoff = isoDaysAgo(olderThanDays);
-  const result = getDb().prepare("DELETE FROM site_visits WHERE created_at < ?").run(cutoff);
+  const result = await (await getDb()).prepare("DELETE FROM site_visits WHERE created_at < ?").run(cutoff);
   return Number(result.changes ?? 0);
 }

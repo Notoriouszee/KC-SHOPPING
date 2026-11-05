@@ -45,8 +45,8 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
 
   // Brute-force protection: checked before the password, so a locked-out device
   // cannot keep guessing and cannot tell whether the account exists.
-  if (isLoginBlocked(attemptKey, ipHash)) {
-    recordLoginFailure(attemptKey, ipHash, "blocked");
+  if (await isLoginBlocked(attemptKey, ipHash)) {
+    await recordLoginFailure(attemptKey, ipHash, "blocked");
     return {
       error: "Too many sign-in attempts. Please wait a few minutes and try again.",
     };
@@ -61,11 +61,11 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
   }
 
   if (!result) {
-    recordLoginFailure(attemptKey, ipHash, "failed");
+    await recordLoginFailure(attemptKey, ipHash, "failed");
     return { error: "Incorrect email or password." };
   }
 
-  clearLoginFailures(attemptKey);
+  await clearLoginFailures(attemptKey);
   await setSessionCookie(result.token);
 
   // Send the user back where they were going, if that is a safe internal path.

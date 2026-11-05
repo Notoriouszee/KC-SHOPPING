@@ -33,16 +33,16 @@ export type RecordViewInput = {
  * Records a view for a published product. Silently ignores drafts and unknown
  * products so the tracking endpoint cannot be used to probe the catalogue.
  */
-export function recordProductView(input: RecordViewInput): boolean {
-  const product = getDb()
+export async function recordProductView(input: RecordViewInput): Promise<boolean> {
+  const product = await (await getDb())
     .prepare(
       "SELECT id, seller_id FROM products WHERE id = ? AND publication_status = 'published'",
     )
-    .get(input.productId) as { id: string; seller_id: string } | undefined;
+    .get<{ id: string; seller_id: string }>(input.productId);
 
   if (!product) return false;
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO product_views (id, product_id, seller_id, source, referrer_host, visitor_hash, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -68,28 +68,28 @@ export type ProductPerformance = {
   conversionRate: number;
 };
 
-function performanceFor(
+async function performanceFor(
   sellerId: string,
   productId: string,
   since: string,
-): ProductPerformance {
-  const db = getDb();
+): Promise<ProductPerformance> {
+  const db = await getDb();
 
-  const viewRow = db
+  const viewRow = await db
     .prepare(
       `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniques
        FROM product_views
        WHERE product_id = ? AND seller_id = ? AND created_at >= ?`,
     )
-    .get(productId, sellerId, since) as { views: number; uniques: number };
+    .get<{ views: number; uniques: number }>(productId, sellerId, since);
 
-  const orderRow = db
+  const orderRow = await db
     .prepare(
       `SELECT COUNT(*) AS orders
        FROM orders
        WHERE product_id = ? AND seller_id = ? AND created_at >= ? AND status != 'cancelled'`,
     )
-    .get(productId, sellerId, since) as { orders: number };
+    .get<{ orders: number }>(productId, sellerId, since);
 
   const views = Number(viewRow?.views ?? 0);
   const uniqueVisitors = Number(viewRow?.uniques ?? 0);
@@ -109,11 +109,11 @@ function sinceIso(days: number): string {
 }
 
 /** Performance for one product, over the last `days` days. */
-export function productPerformance(
+export async function productPerformance(
   sellerId: string,
   productId: string,
   days = 30,
-): ProductPerformance {
+): Promise<ProductPerformance> {
   return performanceFor(sellerId, productId, sinceIso(days));
 }
 
@@ -122,15 +122,15 @@ export function productPerformance(
  * aggregate queries plus one per-product pair, which is fine for a catalogue of
  * this size (bounded by the caller's limit).
  */
-export function productPerformanceMap(
+export async function productPerformanceMap(
   sellerId: string,
   productIds: string[],
   days = 30,
-): Record<string, ProductPerformance> {
+): Promise<Record<string, ProductPerformance>> {
   const since = sinceIso(days);
   const map: Record<string, ProductPerformance> = {};
   for (const productId of productIds) {
-    map[productId] = performanceFor(sellerId, productId, since);
+    map[productId] = await performanceFor(sellerId, productId, since);
   }
   return map;
 }
@@ -138,9 +138,9 @@ export function productPerformanceMap(
 export type SourceBreakdownRow = { source: string; views: number };
 
 /** Views grouped by source, for the "where traffic comes from" summary. */
-export function sourceBreakdown(sellerId: string, days = 30): SourceBreakdownRow[] {
+export async function sourceBreakdown(sellerId: string, days = 30): Promise<SourceBreakdownRow[]> {
   return plainRows<SourceBreakdownRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT COALESCE(source, 'direct') AS source, COUNT(*) AS views
          FROM product_views
@@ -155,24 +155,24 @@ export function sourceBreakdown(sellerId: string, days = 30): SourceBreakdownRow
 export type ShopPerformance = { views: number; uniqueVisitors: number; orders: number };
 
 /** Totals across the whole catalogue, for the dashboard summary. */
-export function shopPerformance(sellerId: string, days = 30): ShopPerformance {
+export async function shopPerformance(sellerId: string, days = 30): Promise<ShopPerformance> {
   const since = sinceIso(days);
-  const db = getDb();
+  const db = await getDb();
 
-  const views = db
+  const views = await db
     .prepare(
       `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniques
        FROM product_views WHERE seller_id = ? AND created_at >= ?`,
     )
-    .get(sellerId, since) as { views: number; uniques: number };
+    .get<{ views: number; uniques: number }>(sellerId, since);
 
-  const orders = db
+  const orders = await db
     .prepare(
       `SELECT COUNT(*) AS orders FROM orders
        WHERE seller_id = ? AND created_at >= ? AND source IN ('product_link', 'shop')
          AND status != 'cancelled'`,
     )
-    .get(sellerId, since) as { orders: number };
+    .get<{ orders: number }>(sellerId, since);
 
   return {
     views: Number(views?.views ?? 0),
@@ -182,8 +182,8 @@ export function shopPerformance(sellerId: string, days = 30): ShopPerformance {
 }
 
 /** Housekeeping: drop views older than the retention window. */
-export function pruneViews(olderThanDays = VIEW_RETENTION_DAYS): number {
+export async function pruneViews(olderThanDays = VIEW_RETENTION_DAYS): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-  const result = getDb().prepare("DELETE FROM product_views WHERE created_at < ?").run(cutoff);
+  const result = await (await getDb()).prepare("DELETE FROM product_views WHERE created_at < ?").run(cutoff);
   return Number(result.changes ?? 0);
 }

@@ -21,7 +21,7 @@ export async function placePublicOrderAction(
   const ipHash = hashClientIp(clientIp(headerList));
 
   try {
-    const result = createPublicOrder({
+    const result = await createPublicOrder({
       shopSlug: formText(formData, "shopSlug"),
       productSlug: formText(formData, "productSlug"),
       name: formText(formData, "name") || user.owner_name,

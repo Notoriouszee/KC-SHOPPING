@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const shop = getPublicShop(slug);
+  const shop = await getPublicShop(slug);
 
   if (!shop) {
     return { title: "Shop not found", robots: { index: false, follow: false } };
@@ -27,17 +27,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PublicShopPage({ params }: Props) {
   const { slug } = await params;
-  const shop = getPublicShop(slug);
+  const shop = await getPublicShop(slug);
 
   if (!shop) {
-    const redirect = resolveRetiredSlug(slug);
+    const redirect = await resolveRetiredSlug(slug);
     if (redirect) permanentRedirect(`/shop/${redirect.current_slug}`);
     notFound();
   }
 
   const user = await getCurrentUser();
   const initial = shop.shop_name.slice(0, 1).toUpperCase();
-  const products = listPublishedProducts(shop.id);
+  const products = await listPublishedProducts(shop.id);
 
   return (
     <div className="min-h-screen bg-black">

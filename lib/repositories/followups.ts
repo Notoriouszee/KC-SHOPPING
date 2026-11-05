@@ -26,14 +26,14 @@ function assertDueDate(value: string): string {
   return parsed.toISOString();
 }
 
-export function listFollowUps(
+export async function listFollowUps(
   sellerId: string,
   options: { status?: "open" | "done" | "cancelled" | "all"; limit?: number } = {},
-): FollowUpWithContext[] {
+): Promise<FollowUpWithContext[]> {
   const status = options.status ?? "open";
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
 
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT f.*, c.name AS customer_name, o.reference AS order_reference
        FROM follow_ups f
@@ -49,13 +49,17 @@ export function listFollowUps(
   return plainRows<FollowUpWithContext>(rows);
 }
 
-export function followUpsDueToday(sellerId: string): FollowUpWithContext[] {
-  return listFollowUps(sellerId, { status: "open", limit: 50 }).filter(
+export async function followUpsDueToday(sellerId: string): Promise<FollowUpWithContext[]> {
+  const rows = await listFollowUps(sellerId, { status: "open", limit: 50 });
+  return rows.filter(
     (item) => new Date(item.due_at).getTime() <= Date.now() + 24 * 60 * 60 * 1000,
   );
 }
 
-export function createFollowUp(sellerId: string, input: FollowUpInput): FollowUp {
+export async function createFollowUp(
+  sellerId: string,
+  input: FollowUpInput,
+): Promise<FollowUp> {
   const title = requiredString(input.title, "title", "Follow-up task", { max: 160 });
   const dueAt = assertDueDate(input.dueAt);
   const orderId = input.orderId?.trim() || null;
@@ -66,29 +70,32 @@ export function createFollowUp(sellerId: string, input: FollowUpInput): FollowUp
       { field: "orderId", message: "Link the follow-up to an order or a customer." },
     ]);
   }
-  if (orderId && !getOrderDetail(sellerId, orderId)) {
+  if (orderId && !(await getOrderDetail(sellerId, orderId))) {
     throw new ValidationError([{ field: "orderId", message: "Order not found." }]);
   }
-  if (customerId && !getCustomer(sellerId, customerId)) {
+  if (customerId && !(await getCustomer(sellerId, customerId))) {
     throw new ValidationError([{ field: "customerId", message: "Customer not found." }]);
   }
 
   const id = newId();
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO follow_ups (id, seller_id, order_id, customer_id, title, notes, due_at, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
     )
     .run(id, sellerId, orderId, customerId, title, input.notes?.trim() || null, dueAt, nowIso());
 
-  const created = getDb()
+  const created = await (await getDb())
     .prepare("SELECT * FROM follow_ups WHERE id = ? AND seller_id = ?")
     .get(id, sellerId);
   return plainRow<FollowUp>(created)!;
 }
 
-export function completeFollowUp(sellerId: string, followUpId: string): void {
-  const result = getDb()
+export async function completeFollowUp(
+  sellerId: string,
+  followUpId: string,
+): Promise<void> {
+  const result = await (await getDb())
     .prepare(
       "UPDATE follow_ups SET status = 'done', completed_at = ? WHERE id = ? AND seller_id = ? AND status = 'open'",
     )
@@ -98,26 +105,32 @@ export function completeFollowUp(sellerId: string, followUpId: string): void {
   }
 }
 
-export function reopenFollowUp(sellerId: string, followUpId: string): void {
-  getDb()
+export async function reopenFollowUp(
+  sellerId: string,
+  followUpId: string,
+): Promise<void> {
+  await (await getDb())
     .prepare(
       "UPDATE follow_ups SET status = 'open', completed_at = NULL WHERE id = ? AND seller_id = ?",
     )
     .run(followUpId, sellerId);
 }
 
-export function cancelFollowUp(sellerId: string, followUpId: string): void {
-  getDb()
+export async function cancelFollowUp(
+  sellerId: string,
+  followUpId: string,
+): Promise<void> {
+  await (await getDb())
     .prepare("UPDATE follow_ups SET status = 'cancelled' WHERE id = ? AND seller_id = ?")
     .run(followUpId, sellerId);
 }
 
 export type FollowUpStats = { open: number; overdue: number; dueToday: number };
 
-export function followUpStats(sellerId: string): FollowUpStats {
-  const rows = getDb()
+export async function followUpStats(sellerId: string): Promise<FollowUpStats> {
+  const rows = (await (await getDb())
     .prepare("SELECT due_at FROM follow_ups WHERE seller_id = ? AND status = 'open'")
-    .all(sellerId) as unknown as { due_at: string }[];
+    .all(sellerId)) as unknown as { due_at: string }[];
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);

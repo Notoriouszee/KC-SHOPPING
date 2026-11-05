@@ -85,26 +85,26 @@ test("slug suggestions are readable and valid", () => {
   }
 });
 
-test("sign-up assigns a unique public slug from the business name", () => {
-  const profile = getShopProfile(ada.id);
+test("sign-up assigns a unique public slug from the business name", async () => {
+  const profile = await getShopProfile(ada.id);
   assert.equal(profile.shop_slug, "mystore-fashion");
 
-  const other = getShopProfile(bayo.id);
+  const other = await getShopProfile(bayo.id);
   assert.equal(other.shop_slug, "bayo-bags");
   assert.notEqual(profile.shop_slug, other.shop_slug);
 });
 
-test("allocateSlug never returns a slug that is already taken", () => {
-  const second = allocateSlug("Mystore Fashion");
+test("allocateSlug never returns a slug that is already taken", async () => {
+  const second = await allocateSlug("Mystore Fashion");
   assert.notEqual(second, "mystore-fashion");
   assert.equal(slugProblem(second), null);
-  assert.equal(isSlugTaken(second), false);
+  assert.equal(await isSlugTaken(second), false);
 
-  assert.equal(allocateSlug("Shop").startsWith("shop-"), true);
+  assert.equal((await allocateSlug("Shop")).startsWith("shop-"), true);
 });
 
-test("the public shop lookup is case-insensitive and returns only public fields", () => {
-  const shop = getPublicShop("MyStore-Fashion");
+test("the public shop lookup is case-insensitive and returns only public fields", async () => {
+  const shop = await getPublicShop("MyStore-Fashion");
   assert.ok(shop);
   assert.equal(shop.shop_slug, "mystore-fashion");
   assert.equal(shop.shop_name, "Mystore Fashion");
@@ -113,110 +113,120 @@ test("the public shop lookup is case-insensitive and returns only public fields"
   assert.equal("business_name" in shop, false);
   assert.equal("password_hash" in shop, false);
 
-  assert.equal(getPublicShop("does-not-exist"), null);
+  assert.equal(await getPublicShop("does-not-exist"), null);
 });
 
-test("shop details can be updated without touching the slug", () => {
-  updateShopProfile(ada.id, {
+test("shop details can be updated without touching the slug", async () => {
+  await updateShopProfile(ada.id, {
     shopName: "Mystore Fashion NG",
     description: "Bags and accessories.",
     contactPhone: "08031234567",
     logoUrl: "/media/shop-logos/example.png",
   });
 
-  const shop = getPublicShop("mystore-fashion");
+  const shop = await getPublicShop("mystore-fashion");
   assert.equal(shop.shop_name, "Mystore Fashion NG");
   assert.equal(shop.shop_description, "Bags and accessories.");
   assert.equal(shop.shop_contact_phone, "08031234567");
   assert.equal(shop.shop_logo_url, "/media/shop-logos/example.png");
 });
 
-test("a slug change keeps the old link working via redirect", () => {
-  const result = changeShopSlug(ada.id, "ada-boutique");
+test("a slug change keeps the old link working via redirect", async () => {
+  const result = await changeShopSlug(ada.id, "ada-boutique");
   assert.equal(result.slug, "ada-boutique");
   assert.equal(result.previousSlug, "mystore-fashion");
 
   // New link resolves.
-  assert.equal(getPublicShop("ada-boutique").shop_slug, "ada-boutique");
+  assert.equal((await getPublicShop("ada-boutique")).shop_slug, "ada-boutique");
 
   // Old link is gone as a live shop but resolves to a redirect target.
-  assert.equal(getPublicShop("mystore-fashion"), null);
-  const redirect = resolveRetiredSlug("mystore-fashion");
+  assert.equal(await getPublicShop("mystore-fashion"), null);
+  const redirect = await resolveRetiredSlug("mystore-fashion");
   assert.equal(redirect.seller_id, ada.id);
   assert.equal(redirect.current_slug, "ada-boutique");
 
   // History is visible to the seller.
-  const history = listSlugHistory(ada.id);
+  const history = await listSlugHistory(ada.id);
   assert.equal(history[0].old_slug, "mystore-fashion");
 });
 
-test("a retired slug cannot be taken by another seller", () => {
-  assert.equal(isSlugTaken("mystore-fashion"), true);
-  assert.throws(() => changeShopSlug(bayo.id, "mystore-fashion"), /already taken/i);
-  assert.equal(getShopProfile(bayo.id).shop_slug, "bayo-bags");
+test("a retired slug cannot be taken by another seller", async () => {
+  assert.equal(await isSlugTaken("mystore-fashion"), true);
+  await assert.rejects(async () => {
+    await changeShopSlug(bayo.id, "mystore-fashion");
+  }, /already taken/i);
+  assert.equal((await getShopProfile(bayo.id)).shop_slug, "bayo-bags");
 });
 
-test("a seller cannot reclaim their own retired slug", () => {
+test("a seller cannot reclaim their own retired slug", async () => {
   // Uniqueness is checked before the cooldown, so the specific error is stable.
-  assert.throws(() => changeShopSlug(ada.id, "mystore-fashion"), /already taken/i);
-  assert.equal(getShopProfile(ada.id).shop_slug, "ada-boutique");
+  await assert.rejects(async () => {
+    await changeShopSlug(ada.id, "mystore-fashion");
+  }, /already taken/i);
+  assert.equal((await getShopProfile(ada.id)).shop_slug, "ada-boutique");
 });
 
-test("slug changes are rate limited by a 24 hour cooldown", () => {
-  const cooldown = slugChangeCooldown(ada.id);
+test("slug changes are rate limited by a 24 hour cooldown", async () => {
+  const cooldown = await slugChangeCooldown(ada.id);
   assert.equal(cooldown.canChange, false);
   assert.ok(cooldown.nextAllowedAt);
 
-  assert.throws(() => changeShopSlug(ada.id, "ada-boutique-2"), /changed recently/i);
+  await assert.rejects(async () => {
+    await changeShopSlug(ada.id, "ada-boutique-2");
+  }, /changed recently/i);
 
   // After the admin/demo cooldown reset the change is allowed again.
-  clearSlugCooldown(ada.id);
-  assert.equal(slugChangeCooldown(ada.id).canChange, true);
-  const result = changeShopSlug(ada.id, "ada-boutique-2");
+  await clearSlugCooldown(ada.id);
+  assert.equal((await slugChangeCooldown(ada.id)).canChange, true);
+  const result = await changeShopSlug(ada.id, "ada-boutique-2");
   assert.equal(result.previousSlug, "ada-boutique");
-  assert.equal(resolveRetiredSlug("ada-boutique").current_slug, "ada-boutique-2");
+  assert.equal((await resolveRetiredSlug("ada-boutique")).current_slug, "ada-boutique-2");
 });
 
-test("changing a slug to the same value is a no-op", () => {
-  clearSlugCooldown(ada.id);
-  const result = changeShopSlug(ada.id, "ada-boutique-2");
+test("changing a slug to the same value is a no-op", async () => {
+  await clearSlugCooldown(ada.id);
+  const result = await changeShopSlug(ada.id, "ada-boutique-2");
   assert.equal(result.slug, "ada-boutique-2");
-  assert.equal(listSlugHistory(ada.id).filter((entry) => entry.old_slug === "ada-boutique-2").length, 0);
+  assert.equal((await listSlugHistory(ada.id)).filter((entry) => entry.old_slug === "ada-boutique-2").length, 0);
 });
 
-test("invalid and reserved slugs are rejected with a usable message", () => {
-  assert.throws(() => changeShopSlug(ada.id, "dashboard"), /reserved/i);
-  assert.throws(() => changeShopSlug(ada.id, "!!"), /characters|Choose/i);
-  assert.equal(getShopProfile(ada.id).shop_slug, "ada-boutique-2");
+test("invalid and reserved slugs are rejected with a usable message", async () => {
+  await assert.rejects(async () => {
+    await changeShopSlug(ada.id, "dashboard");
+  }, /reserved/i);
+  await assert.rejects(async () => {
+    await changeShopSlug(ada.id, "!!");
+  }, /characters|Choose/i);
+  assert.equal((await getShopProfile(ada.id)).shop_slug, "ada-boutique-2");
 });
 
-test("ensureShopSlugs backfills accounts that predate the storefront", () => {
+test("ensureShopSlugs backfills accounts that predate the storefront", async () => {
   // Simulate a legacy account by clearing the slug directly.
-  getDb().prepare("UPDATE users SET shop_slug = NULL WHERE id = ?").run(bayo.id);
-  assert.equal(getShopProfile(bayo.id).shop_slug, null);
+  const db = await getDb();
+  await db.prepare("UPDATE users SET shop_slug = NULL WHERE id = ?").run(bayo.id);
+  assert.equal((await getShopProfile(bayo.id)).shop_slug, null);
 
-  const assigned = ensureShopSlugs();
+  const assigned = await ensureShopSlugs();
   assert.ok(assigned >= 1);
-  assert.equal(getShopProfile(bayo.id).shop_slug, "bayo-bags");
+  assert.equal((await getShopProfile(bayo.id)).shop_slug, "bayo-bags");
 
   // Idempotent: a second run assigns nothing.
-  assert.equal(ensureShopSlugs(), 0);
+  assert.equal(await ensureShopSlugs(), 0);
 });
 
-test("assignInitialSlug is collision-safe", () => {
-  const slug = allocateSlug("Mystore Fashion");
-  assert.equal(isSlugTaken(slug), false);
-  assignInitialSlug(bayo.id, "Mystore Fashion");
-  assert.notEqual(getShopProfile(bayo.id).shop_slug, "mystore-fashion");
+test("assignInitialSlug is collision-safe", async () => {
+  const slug = await allocateSlug("Mystore Fashion");
+  assert.equal(await isSlugTaken(slug), false);
+  await assignInitialSlug(bayo.id, "Mystore Fashion");
+  assert.notEqual((await getShopProfile(bayo.id)).shop_slug, "mystore-fashion");
 });
 
-test("repository results are plain objects (safe to pass to client components)", () => {
+test("repository results are plain objects (safe to pass to client components)", async () => {
   // SQLite rows use a null prototype; React refuses to serialise those across
   // the server/client boundary, so the data layer must copy them.
-  const profile = getShopProfile(ada.id);
-  const shop = getPublicShop("ada-boutique-2");
+  const profile = await getShopProfile(ada.id);
+  const shop = await getPublicShop("ada-boutique-2");
   assert.equal(Object.getPrototypeOf(profile), Object.prototype);
   assert.equal(Object.getPrototypeOf(shop), Object.prototype);
-  assert.equal(Object.getPrototypeOf(listSlugHistory(ada.id)[0]), Object.prototype);
+  assert.equal(Object.getPrototypeOf((await listSlugHistory(ada.id))[0]), Object.prototype);
 });
-

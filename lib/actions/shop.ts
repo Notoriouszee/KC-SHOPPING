@@ -57,7 +57,7 @@ export async function updateShopAction(_prev: ActionState, formData: FormData): 
     return { error: "Please fix the highlighted fields.", fieldErrors };
   }
 
-  const current = getShopProfile(user.id);
+  const current = await getShopProfile(user.id);
   if (!current) return { error: "We could not find your shop." };
 
   let logoUrl = current.shop_logo_url;
@@ -82,7 +82,7 @@ export async function updateShopAction(_prev: ActionState, formData: FormData): 
   }
 
   try {
-    updateShopProfile(user.id, {
+    await updateShopProfile(user.id, {
       shopName,
       description,
       logoUrl,
@@ -117,11 +117,11 @@ export async function changeShopSlugAction(
     };
   }
 
-  const current = getShopProfile(user.id);
+  const current = await getShopProfile(user.id);
   if (!current) return { error: "We could not find your shop." };
 
   try {
-    const result = changeShopSlug(user.id, requested);
+    const result = await changeShopSlug(user.id, requested);
 
     revalidatePath("/my-shop");
     if (result.previousSlug) revalidatePath(`/shop/${result.previousSlug}`);

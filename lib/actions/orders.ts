@@ -73,7 +73,7 @@ export async function createOrderAction(_prev: ActionState, formData: FormData):
 
     const deliveryAddress = formText(formData, "deliveryAddress") || customerAddress || null;
 
-    const order = createOrder(user.id, {
+    const order = await createOrder(user.id, {
       customer: {
         id: customerId || undefined,
         name: customerName,
@@ -105,7 +105,7 @@ export async function updateOrderStatusAction(formData: FormData): Promise<void>
   if (!orderId || !isOrderStatus(status)) return;
 
   try {
-    updateOrderStatus(user.id, orderId, status as OrderStatus);
+    await updateOrderStatus(user.id, orderId, status as OrderStatus);
   } catch (error) {
     console.error("[order status]", error);
   }
@@ -126,7 +126,7 @@ export async function recordPaymentAction(_prev: ActionState, formData: FormData
       throw new ValidationError([{ field: "amount", message: "Enter the amount you received." }]);
     }
 
-    recordPayment(user.id, orderId, amountKobo);
+    await recordPayment(user.id, orderId, amountKobo);
     revalidatePath(`/orders/${orderId}`);
     revalidatePath("/payments");
     revalidatePath("/dashboard");
@@ -141,7 +141,7 @@ export async function refundOrderAction(formData: FormData): Promise<void> {
   const orderId = formText(formData, "orderId");
   if (!orderId) return;
   try {
-    refundOrder(user.id, orderId);
+    await refundOrder(user.id, orderId);
   } catch (error) {
     console.error("[refund]", error);
   }
@@ -163,7 +163,7 @@ export async function updateOrderNotesAction(
       throw new ValidationError([{ field: "deliveryFee", message: "Enter a valid delivery fee." }]);
     }
 
-    updateOrderNotes(user.id, orderId, {
+    await updateOrderNotes(user.id, orderId, {
       deliveryAddress: formText(formData, "deliveryAddress") || null,
       notes: formText(formData, "notes") || null,
       deliveryFeeKobo,

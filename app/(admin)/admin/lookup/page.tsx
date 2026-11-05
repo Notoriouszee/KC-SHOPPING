@@ -15,7 +15,7 @@ export default async function AdminLookupPage({
 }) {
   const params = await searchParams;
   const reference = (params.ref ?? "").trim();
-  const order = reference ? adminOrderByReference(reference) : null;
+  const order = reference ? await adminOrderByReference(reference) : null;
 
   return (
     <div className="space-y-5">

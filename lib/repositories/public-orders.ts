@@ -59,39 +59,43 @@ export function hashClientIp(ip: string, date = new Date()): string {
   return createHash("sha256").update(`${salt}:${day}:${ip}`).digest("hex").slice(0, 40);
 }
 
-function recordAttempt(productId: string | null, ipHash: string, outcome: "accepted" | "rejected" | "bot"): void {
-  getDb()
+async function recordAttempt(
+  productId: string | null,
+  ipHash: string,
+  outcome: "accepted" | "rejected" | "bot",
+): Promise<void> {
+  await (await getDb())
     .prepare(
       "INSERT INTO public_order_attempts (id, product_id, ip_hash, outcome, created_at) VALUES (?, ?, ?, ?, ?)",
     )
     .run(newId(), productId, ipHash, outcome, nowIso());
 }
 
-function countAttempts(ipHash: string, sinceMinutes: number): number {
+async function countAttempts(ipHash: string, sinceMinutes: number): Promise<number> {
   const since = new Date(Date.now() - sinceMinutes * 60 * 1000).toISOString();
-  const row = getDb()
+  const row = await (await getDb())
     .prepare("SELECT COUNT(*) AS total FROM public_order_attempts WHERE ip_hash = ? AND created_at > ?")
-    .get(ipHash, since) as { total: number } | undefined;
+    .get<{ total: number }>(ipHash, since);
   return Number(row?.total ?? 0);
 }
 
 /** True when this IP has already made too many attempts. */
-export function isRateLimited(ipHash: string): boolean {
+export async function isRateLimited(ipHash: string): Promise<boolean> {
   return (
-    countAttempts(ipHash, PUBLIC_ORDER_RATE_WINDOW_MINUTES) >= PUBLIC_ORDER_MAX_PER_WINDOW ||
-    countAttempts(ipHash, 60) >= PUBLIC_ORDER_MAX_PER_HOUR
+    (await countAttempts(ipHash, PUBLIC_ORDER_RATE_WINDOW_MINUTES)) >= PUBLIC_ORDER_MAX_PER_WINDOW ||
+    (await countAttempts(ipHash, 60)) >= PUBLIC_ORDER_MAX_PER_HOUR
   );
 }
 
 /** Housekeeping: drop attempt rows after the retention window. */
-export function pruneAttempts(olderThanDays = PUBLIC_ORDER_ATTEMPT_RETENTION_DAYS): void {
+export async function pruneAttempts(olderThanDays = PUBLIC_ORDER_ATTEMPT_RETENTION_DAYS): Promise<void> {
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-  getDb().prepare("DELETE FROM public_order_attempts WHERE created_at < ?").run(cutoff);
+  await (await getDb()).prepare("DELETE FROM public_order_attempts WHERE created_at < ?").run(cutoff);
 }
 
-export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
+export async function createPublicOrder(input: PublicOrderInput): Promise<PublicOrderResult> {
   const ipHash = input.ipHash ?? hashClientIp("unknown");
-  const product = getPublicProduct(input.shopSlug, input.productSlug);
+  const product = await getPublicProduct(input.shopSlug, input.productSlug);
 
   if (!product) {
     throw new ValidationError([
@@ -101,14 +105,14 @@ export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
 
   // Hidden field: only bots fill it in. Record and refuse without detail.
   if (input.honeypot && input.honeypot.trim() !== "") {
-    recordAttempt(product.id, ipHash, "bot");
+    await recordAttempt(product.id, ipHash, "bot");
     throw new ValidationError([
       { field: "form", message: "We could not place that order. Please try again." },
     ]);
   }
 
-  if (isRateLimited(ipHash)) {
-    recordAttempt(product.id, ipHash, "rejected");
+  if (await isRateLimited(ipHash)) {
+    await recordAttempt(product.id, ipHash, "rejected");
     throw new ValidationError([
       {
         field: "form",
@@ -154,7 +158,7 @@ export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
 
   if (fieldErrors.length > 0) {
     // Invalid submissions count towards the limit so scripts cannot probe freely.
-    recordAttempt(product.id, ipHash, "rejected");
+    await recordAttempt(product.id, ipHash, "rejected");
     throw new ValidationError(fieldErrors);
   }
 
@@ -172,7 +176,7 @@ export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
   const goodsKobo = product.price_kobo * quantity;
 
   // Price comes from the database, never from the submitted form.
-  const order = createOrder(product.shop.id, {
+  const order = await createOrder(product.shop.id, {
     customer: { name, phone: phone as string, address },
     items: [
       {
@@ -193,7 +197,7 @@ export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
     amountDueOnlineKobo: goodsKobo,
   });
 
-  recordAttempt(product.id, ipHash, "accepted");
+  await recordAttempt(product.id, ipHash, "accepted");
 
   return {
     orderId: order.id,
@@ -209,10 +213,10 @@ export function createPublicOrder(input: PublicOrderInput): PublicOrderResult {
  * Looks up an order by its confirmation token. Returns only the facts the
  * customer needs — never their own details or the seller's account data.
  */
-export function getPublicOrderByToken(token: string): PublicOrderView | null {
+export async function getPublicOrderByToken(token: string): Promise<PublicOrderView | null> {
   if (!/^[0-9a-f]{48}$/i.test(token)) return null;
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT o.id AS order_id,
               o.reference,

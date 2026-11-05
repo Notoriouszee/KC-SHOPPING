@@ -63,22 +63,25 @@ function daysFromNow(days, hour = 9) {
  * fails with EPERM. Deleting rows in dependency order works against a live
  * server and keeps the file (and its WAL) valid.
  */
-function wipe() {
-  getDb().exec(`
-    DELETE FROM product_images;
-    DELETE FROM products;
-    DELETE FROM follow_ups;
-    DELETE FROM order_events;
-    DELETE FROM order_items;
-    DELETE FROM orders;
-    DELETE FROM customers;
-    DELETE FROM shop_slug_history;
-    DELETE FROM sessions;
-    DELETE FROM users;
-  `);
+async function wipe() {
+  const db = await getDb();
+  for (const table of [
+    "product_images",
+    "products",
+    "follow_ups",
+    "order_events",
+    "order_items",
+    "orders",
+    "customers",
+    "shop_slug_history",
+    "sessions",
+    "users",
+  ]) {
+    await db.run(`DELETE FROM ${table};`);
+  }
 }
 
-wipe();
+await wipe();
 
 const created = await signUp({
   email: "ada@mystore.ng",
@@ -93,7 +96,7 @@ const seller = created.user;
 
 // Complete the storefront profile. The slug is assigned automatically at
 // sign-up; only override it when the readable choice is still free.
-updateShopProfile(seller.id, {
+await updateShopProfile(seller.id, {
   shopName: "Mystore Fashion",
   description:
     "Handpicked bags, shoes and accessories for women who like to stand out. Delivering across Lagos in 24 hours, nationwide in 3 days.",
@@ -107,10 +110,10 @@ updateShopProfile(seller.id, {
 });
 
 const preferredSlug = normaliseSlug("mystore-fashion");
-if (!isSlugTaken(preferredSlug, seller.id)) {
-  changeShopSlug(seller.id, preferredSlug);
+if (!(await isSlugTaken(preferredSlug, seller.id))) {
+  await changeShopSlug(seller.id, preferredSlug);
   // Seeding is not a seller action; do not leave the 24h cooldown in place.
-  clearSlugCooldown(seller.id);
+  await clearSlugCooldown(seller.id);
 }
 
 // Catalogue: a mix of published, draft and out-of-stock products so every UI
@@ -163,7 +166,7 @@ const productSeed = [
 
 const products = [];
 for (const item of productSeed) {
-  const product = createProduct(seller.id, {
+  const product = await createProduct(seller.id, {
     name: item.name,
     priceKobo: naira(item.price),
     description: item.description,
@@ -173,7 +176,7 @@ for (const item of productSeed) {
 
   const image = demoImage(item.image);
   if (image) {
-    addImage(seller.id, product.id, {
+    await addImage(seller.id, product.id, {
       url: image.url,
       alt: item.name,
       width: image.width,
@@ -192,7 +195,7 @@ for (const person of [
   { key: "tunde", name: "Tunde Adeyemi", phone: "08084567890", address: "7 Bodija Estate, Ibadan" },
   { key: "blessing", name: "Blessing Etim", phone: "08095678901", address: "5 Marian Road, Calabar" },
 ]) {
-  customers[person.key] = createCustomer(seller.id, {
+  customers[person.key] = await createCustomer(seller.id, {
     name: person.name,
     phone: person.phone,
     address: person.address,
@@ -203,7 +206,7 @@ const orders = [];
 
 // 1. Fully paid, mid-fulfilment.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.chinedu.id, name: customers.chinedu.name, phone: customers.chinedu.phone },
     items: [{ description: "Black designer bag", quantity: 1, unitPriceKobo: naira(45000) }],
     deliveryFeeKobo: naira(2500),
@@ -213,7 +216,7 @@ orders.push(
 
 // 2. Part paid.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.fatima.id, name: customers.fatima.name, phone: customers.fatima.phone },
     items: [{ description: "Ankara wrap dress", quantity: 2, unitPriceKobo: naira(18000) }],
     deliveryFeeKobo: naira(1500),
@@ -222,7 +225,7 @@ orders.push(
 
 // 3. Brand new, unpaid.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.ngozi.id, name: customers.ngozi.name, phone: customers.ngozi.phone },
     items: [{ description: "Leather sandals", quantity: 1, unitPriceKobo: naira(12500) }],
   }),
@@ -230,7 +233,7 @@ orders.push(
 
 // 4. Delivered and paid.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.tunde.id, name: customers.tunde.name, phone: customers.tunde.phone },
     items: [{ description: "Embroidered kaftan", quantity: 1, unitPriceKobo: naira(32000) }],
     deliveryFeeKobo: naira(2000),
@@ -239,7 +242,7 @@ orders.push(
 
 // 5. Ready for pickup, part paid.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.blessing.id, name: customers.blessing.name, phone: customers.blessing.phone },
     items: [{ description: "Beaded necklace set", quantity: 3, unitPriceKobo: naira(6500) }],
   }),
@@ -247,36 +250,36 @@ orders.push(
 
 // 6. Cancelled.
 orders.push(
-  createOrder(seller.id, {
+  await createOrder(seller.id, {
     customer: { id: customers.chinedu.id, name: customers.chinedu.name, phone: customers.chinedu.phone },
     items: [{ description: "Silk scarf", quantity: 1, unitPriceKobo: naira(9000) }],
   }),
 );
 
 // Progress order 1 to processing with full payment.
-updateOrderStatus(seller.id, orders[0].id, "confirmed");
-updateOrderStatus(seller.id, orders[0].id, "processing");
-recordPayment(seller.id, orders[0].id, orders[0].total_kobo);
+await updateOrderStatus(seller.id, orders[0].id, "confirmed");
+await updateOrderStatus(seller.id, orders[0].id, "processing");
+await recordPayment(seller.id, orders[0].id, orders[0].total_kobo);
 
 // Order 2: confirmed with a deposit.
-updateOrderStatus(seller.id, orders[1].id, "confirmed");
-recordPayment(seller.id, orders[1].id, naira(20000));
+await updateOrderStatus(seller.id, orders[1].id, "confirmed");
+await recordPayment(seller.id, orders[1].id, naira(20000));
 
 // Order 4: delivered and paid in full.
-updateOrderStatus(seller.id, orders[3].id, "confirmed");
-updateOrderStatus(seller.id, orders[3].id, "processing");
-updateOrderStatus(seller.id, orders[3].id, "delivered");
-recordPayment(seller.id, orders[3].id, orders[3].total_kobo);
+await updateOrderStatus(seller.id, orders[3].id, "confirmed");
+await updateOrderStatus(seller.id, orders[3].id, "processing");
+await updateOrderStatus(seller.id, orders[3].id, "delivered");
+await recordPayment(seller.id, orders[3].id, orders[3].total_kobo);
 
 // Order 5: ready for pickup, partial payment.
-updateOrderStatus(seller.id, orders[4].id, "processing");
-updateOrderStatus(seller.id, orders[4].id, "ready");
-recordPayment(seller.id, orders[4].id, naira(10000));
+await updateOrderStatus(seller.id, orders[4].id, "processing");
+await updateOrderStatus(seller.id, orders[4].id, "ready");
+await recordPayment(seller.id, orders[4].id, naira(10000));
 
 // Order 6: cancelled.
-updateOrderStatus(seller.id, orders[5].id, "cancelled");
+await updateOrderStatus(seller.id, orders[5].id, "cancelled");
 
-createFollowUp(seller.id, {
+await createFollowUp(seller.id, {
   title: "Confirm Chinedu received the bag",
   dueAt: daysFromNow(-1),
   notes: "He asked for delivery on Saturday.",
@@ -284,14 +287,14 @@ createFollowUp(seller.id, {
   customerId: customers.chinedu.id,
 });
 
-createFollowUp(seller.id, {
+await createFollowUp(seller.id, {
   title: "Collect balance for Ankara dress",
   dueAt: daysFromNow(0, 15),
   orderId: orders[1].id,
   customerId: customers.fatima.id,
 });
 
-createFollowUp(seller.id, {
+await createFollowUp(seller.id, {
   title: "Ask Blessing when she is picking up",
   dueAt: daysFromNow(7),
   orderId: orders[4].id,
@@ -309,8 +312,8 @@ const customerAccount = await signUp({
 });
 if ("error" in customerAccount) throw new Error(customerAccount.error);
 
-const demoCustomerOrder = createPublicOrder({
-  shopSlug: getShopProfile(seller.id).shop_slug,
+const demoCustomerOrder = await createPublicOrder({
+  shopSlug: (await getShopProfile(seller.id)).shop_slug,
   productSlug: "black-designer-bag",
   name: "Blessing Etim",
   phone: "08095678901",
@@ -335,7 +338,7 @@ const adminAccount = await signUp({
 });
 if ("error" in adminAccount) throw new Error(adminAccount.error);
 
-getDb().prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(adminAccount.user.id);
+await (await getDb()).prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(adminAccount.user.id);
 
 // Some visit history so the admin dashboard has data on day one.
 const demoPaths = [
@@ -345,14 +348,14 @@ const demoPaths = [
   "/product/mystore-fashion/black-designer-bag",
   "/contact",
 ];
-const insertVisit = getDb().prepare(
+const insertVisit = (await getDb()).prepare(
   "INSERT INTO site_visits (id, path, visitor_hash, created_at) VALUES (?, ?, ?, ?)",
 );
 for (let day = 29; day >= 0; day -= 1) {
   const visits = 4 + ((day * 7) % 11);
   for (let n = 0; n < visits; n += 1) {
     const when = new Date(Date.now() - day * 24 * 60 * 60 * 1000 - n * 60 * 1000);
-    insertVisit.run(
+    await insertVisit.run(
       newId(),
       demoPaths[(day + n) % demoPaths.length],
       `seed-visitor-${day}-${n % 6}`,
@@ -367,7 +370,7 @@ console.log("  Customer: blessing@customer.ng / orderpilot123");
 console.log(`  Admin:    ${adminEmail} / ${adminPassword}`);
 console.log(`  Demo order awaiting receipt: ${demoCustomerOrder.reference}`);
 console.log(`  Business: ${seller.business_name}`);
-console.log(`  Shop:     /shop/${getShopProfile(seller.id).shop_slug}`);
+console.log(`  Shop:     /shop/${(await getShopProfile(seller.id)).shop_slug}`);
 console.log(`  Customers: ${Object.keys(customers).length}`);
 console.log(`  Products: ${products.length} (${productSeed.filter((p) => p.published).length} published, ${productSeed.filter((p) => !p.published).length} draft)`);
 console.log(`  Orders: ${orders.length}`);

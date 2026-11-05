@@ -17,7 +17,7 @@ export default async function CustomersPage({
   const user = await requireUser();
   const params = await searchParams;
   const query = (params.q ?? "").trim();
-  const customers = listCustomers(user.id, { query: query || undefined, limit: 300 });
+  const customers = await listCustomers(user.id, { query: query || undefined, limit: 300 });
 
   return (
     <div>

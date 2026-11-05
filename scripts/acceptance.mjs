@@ -9,12 +9,18 @@
  *   node --import ./scripts/register.mjs scripts/acceptance.mjs
  *   PORT=3100 node --import ./scripts/register.mjs scripts/acceptance.mjs
  */
+import { loadEnv } from "./load-env.mjs";
+
+// Use the same database and storage backend as the server under test.
+loadEnv();
+
 import { getDb } from "../lib/db/index.ts";
 import { createSession, findUserByEmail } from "../lib/auth/users.ts";
 import { createPublicOrder, hashClientIp } from "../lib/repositories/public-orders.ts";
 import { getShopProfile } from "../lib/repositories/shop.ts";
 
 const BASE = process.env.ACCEPTANCE_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3100}`;
+const BASE_ORIGIN = new URL(BASE).origin;
 
 let failures = 0;
 let passes = 0;
@@ -44,15 +50,16 @@ function meta(html, attribute, key) {
 }
 
 // --- fixtures ---------------------------------------------------------------
-const seller = findUserByEmail("ada@mystore.ng");
-const shop = seller ? getShopProfile(seller.id) : null;
-const buyer = findUserByEmail("blessing@customer.ng");
-const product = getDb()
+const seller = await findUserByEmail("ada@mystore.ng");
+const shop = seller ? await getShopProfile(seller.id) : null;
+const buyer = await findUserByEmail("blessing@customer.ng");
+const db = await getDb();
+const product = await db
   .prepare("SELECT id, name, slug, price_kobo FROM products WHERE slug = 'black-designer-bag'")
   .get();
-const draft = getDb().prepare("SELECT slug FROM products WHERE slug = 'silk-scarf'").get();
+const draft = await db.prepare("SELECT slug FROM products WHERE slug = 'silk-scarf'").get();
 // The cover image can be replaced by the seller, so compare against what is stored.
-const cover = getDb()
+const cover = await db
   .prepare(
     "SELECT width, height FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1",
   )
@@ -79,7 +86,15 @@ const productPage = await text(productPath);
 check("public product page loads without signing in", productPage.response.status === 200);
 check("product page shows the product name", productPage.body.includes(product.name));
 check("product page shows the price in naira", productPage.body.includes(expectedPrice));
-check("product page shows the product photo", productPage.body.includes("/media/product-images/demo-bag.png"));
+const coverUrl = (
+  await (await getDb())
+    .prepare("SELECT url FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1")
+    .get(product.id)
+)?.url;
+check(
+  "product page shows the product photo",
+  Boolean(coverUrl) && productPage.body.includes(coverUrl),
+);
 check("product page links to the shop", productPage.body.includes(`/shop/${shopSlug}`));
 check(
   "unpublished product is not reachable",
@@ -122,7 +137,10 @@ check("crawler sees an absolute og:url", Boolean(ogUrl) && ogUrl.includes(produc
 check("crawler sees a Twitter card", meta(crawler.body, "name", "twitter:card") === "summary_large_image");
 
 if (ogImage) {
-  const image = await get(new URL(ogImage).pathname);
+  const absolute = new URL(ogImage);
+  const image = absolute.origin === BASE_ORIGIN
+    ? await get(absolute.pathname)
+    : await fetch(absolute.href).then((response) => ({ status: response.status, headers: response.headers }));
   check(
     "the og:image is fetchable without cookies",
     image.status === 200 && (image.headers.get("content-type") ?? "").startsWith("image/"),
@@ -180,7 +198,7 @@ check(
   `got ${account.status}`,
 );
 
-const placed = createPublicOrder({
+const placed = await createPublicOrder({
   shopSlug,
   productSlug: product.slug,
   name: "Acceptance Runner",
@@ -206,7 +224,7 @@ check(
 );
 
 // --- 10: the seller sees it ------------------------------------------------
-const sessionToken = createSession(seller.id);
+const sessionToken = await createSession(seller.id);
 const cookie = { cookie: `kandc_session=${sessionToken}` };
 
 const sellerOrders = await text("/orders", { headers: cookie });
@@ -214,7 +232,7 @@ check("seller dashboard loads when signed in", sellerOrders.response.status === 
 check("the new order appears in the seller's list", sellerOrders.body.includes(placed.reference));
 check("the order is labelled as coming from a product link", sellerOrders.body.includes("Product link"));
 
-const orderDetail = getDb()
+const orderDetail = await db
   .prepare("SELECT id FROM orders WHERE public_token = ?")
   .get(placed.token);
 const detail = await text(`/orders/${orderDetail.id}`, { headers: cookie });
@@ -229,7 +247,7 @@ check("the dashboard exposes a sign-out control", sellerOrders.body.includes("Si
 
 // --- 10c: the customer's own area -------------------------------------------
 if (buyer) {
-  const buyerCookie = { cookie: `kandc_session=${createSession(buyer.id)}` };
+  const buyerCookie = { cookie: `kandc_session=${await createSession(buyer.id)}` };
   const accountPage = await text("/account", { headers: buyerCookie });
   check("the customer area loads for a signed-in customer", accountPage.response.status === 200);
   if (shop?.shop_account_number) {

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const ip = forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
     const userAgent = request.headers.get("user-agent") ?? "";
 
-    recordSiteVisit(path.split("?")[0]!, hashSiteVisitor(ip, userAgent));
+    await recordSiteVisit(path.split("?")[0]!, hashSiteVisitor(ip, userAgent));
   } catch {
     // Deliberately swallowed.
   }

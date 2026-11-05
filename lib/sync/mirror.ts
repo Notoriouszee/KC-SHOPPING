@@ -29,7 +29,7 @@ export type MirrorTable = {
 
 /** Parent tables first, so foreign keys are satisfied. */
 export const MIRROR_TABLES: MirrorTable[] = [
-  { name: "users", remote: "profiles" },
+  { name: "users" },
   { name: "customers" },
   { name: "products" },
   { name: "product_images" },

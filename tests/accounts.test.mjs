@@ -39,7 +39,7 @@ before(async () => {
   });
   if ("error" in s) throw new Error(s.error);
   seller = s.user;
-  shopSlug = getShopProfile(seller.id).shop_slug;
+  shopSlug = (await getShopProfile(seller.id)).shop_slug;
 
   const o = await signUp({
     email: "pay-other@test.ng",
@@ -60,7 +60,7 @@ before(async () => {
   if ("error" in b) throw new Error(b.error);
   buyer = b.user;
 
-  updateShopProfile(seller.id, {
+  await updateShopProfile(seller.id, {
     shopName: "Pay Shop",
     description: "Shop with payment details.",
     bankName: "GTBank",
@@ -70,28 +70,28 @@ before(async () => {
     deliveryNote: "Paid on delivery",
   });
 
-  product = createProduct(seller.id, {
+  product = await createProduct(seller.id, {
     name: "Receipt Bag",
     priceKobo: 4000000,
     publicationStatus: "published",
   });
 });
 
-test("a customer account has no shop link", () => {
+test("a customer account has no shop link", async () => {
   assert.equal(buyer.account_type, "customer");
-  assert.equal(getShopProfile(buyer.id).shop_slug, null);
+  assert.equal((await getShopProfile(buyer.id)).shop_slug, null);
   // Sellers still get one.
   assert.equal(typeof shopSlug, "string");
   assert.ok(shopSlug.length >= 3);
 });
 
-test("the seller's payment details and delivery fee are stored and public", () => {
-  const profile = getShopProfile(seller.id);
+test("the seller's payment details and delivery fee are stored and public", async () => {
+  const profile = await getShopProfile(seller.id);
   assert.equal(profile.shop_bank_name, "GTBank");
   assert.equal(profile.shop_account_number, "0123456789");
   assert.equal(profile.shop_delivery_fee_kobo, 150000);
 
-  const shop = getPublicShop(shopSlug);
+  const shop = await getPublicShop(shopSlug);
   assert.equal(shop.shop_bank_name, "GTBank");
   assert.equal(shop.shop_account_number, "0123456789");
   assert.equal(shop.shop_delivery_fee_kobo, 150000);
@@ -99,8 +99,8 @@ test("the seller's payment details and delivery fee are stored and public", () =
   assert.equal("email" in shop, false);
 });
 
-test("delivery fee is recorded but not part of the amount transferred now", () => {
-  const result = createPublicOrder({
+test("delivery fee is recorded but not part of the amount transferred now", async () => {
+  const result = await createPublicOrder({
     shopSlug,
     productSlug: product.slug,
     name: "Blessing Etim",
@@ -116,7 +116,7 @@ test("delivery fee is recorded but not part of the amount transferred now", () =
   assert.equal(result.deliveryFeeKobo, 150000);
   assert.equal(result.totalKobo, 8150000);
 
-  const order = getOrderDetail(seller.id, result.orderId);
+  const order = await getOrderDetail(seller.id, result.orderId);
   assert.equal(order.delivery_fee_on_delivery, 1);
   assert.equal(order.amount_due_online_kobo, 8000000);
   assert.equal(amountDueOnline(order), 8000000);
@@ -124,8 +124,8 @@ test("delivery fee is recorded but not part of the amount transferred now", () =
   assert.equal(order.payment_status, "unpaid");
 });
 
-test("a receipt cannot be confirmed before it exists", () => {
-  const result = createPublicOrder({
+test("a receipt cannot be confirmed before it exists", async () => {
+  const result = await createPublicOrder({
     shopSlug,
     productSlug: product.slug,
     name: "Blessing Etim",
@@ -135,11 +135,13 @@ test("a receipt cannot be confirmed before it exists", () => {
     ipHash: hashClientIp("203.0.113.51"),
   });
 
-  assert.throws(() => confirmReceipt(seller.id, result.orderId), /has not uploaded a receipt/i);
+  await assert.rejects(async () => {
+    await confirmReceipt(seller.id, result.orderId);
+  }, /has not uploaded a receipt/i);
 });
 
-test("uploading a receipt and confirming marks the goods paid, not the delivery", () => {
-  const result = createPublicOrder({
+test("uploading a receipt and confirming marks the goods paid, not the delivery", async () => {
+  const result = await createPublicOrder({
     shopSlug,
     productSlug: product.slug,
     name: "Blessing Etim",
@@ -149,18 +151,18 @@ test("uploading a receipt and confirming marks the goods paid, not the delivery"
     ipHash: hashClientIp("203.0.113.52"),
   });
 
-  attachReceipt(result.orderId, {
+  await attachReceipt(result.orderId, {
     url: "/media/payment-receipts/receipt.png",
     note: "Paid from GTBank",
     amountKobo: 4000000,
   });
 
-  const withReceipt = getOrderDetail(seller.id, result.orderId);
+  const withReceipt = await getOrderDetail(seller.id, result.orderId);
   assert.equal(withReceipt.receipt_url, "/media/payment-receipts/receipt.png");
   assert.equal(withReceipt.receipt_note, "Paid from GTBank");
   assert.ok(withReceipt.receipt_uploaded_at);
 
-  const confirmed = confirmReceipt(seller.id, result.orderId);
+  const confirmed = await confirmReceipt(seller.id, result.orderId);
   assert.equal(confirmed.paid_kobo, 4000000);
   assert.equal(confirmed.payment_status, "paid");
   // Delivery is still collected on delivery, so the order value is untouched.
@@ -168,8 +170,8 @@ test("uploading a receipt and confirming marks the goods paid, not the delivery"
   assert.equal(confirmed.delivery_fee_on_delivery, 1);
 });
 
-test("another seller cannot confirm someone else's receipt", () => {
-  const result = createPublicOrder({
+test("another seller cannot confirm someone else's receipt", async () => {
+  const result = await createPublicOrder({
     shopSlug,
     productSlug: product.slug,
     name: "Blessing Etim",
@@ -179,26 +181,28 @@ test("another seller cannot confirm someone else's receipt", () => {
     ipHash: hashClientIp("203.0.113.53"),
   });
 
-  attachReceipt(result.orderId, { url: "/media/payment-receipts/other.png" });
+  await attachReceipt(result.orderId, { url: "/media/payment-receipts/other.png" });
 
-  assert.throws(() => confirmReceipt(otherSeller.id, result.orderId), /not found/i);
-  assert.equal(getOrderDetail(seller.id, result.orderId).payment_status, "unpaid");
+  await assert.rejects(async () => {
+    await confirmReceipt(otherSeller.id, result.orderId);
+  }, /not found/i);
+  assert.equal((await getOrderDetail(seller.id, result.orderId)).payment_status, "unpaid");
 });
 
-test("customers only ever see their own orders", () => {
-  const mine = listOrdersForBuyer(buyer.id);
+test("customers only ever see their own orders", async () => {
+  const mine = await listOrdersForBuyer(buyer.id);
   assert.ok(mine.length > 0);
   assert.ok(mine.every((order) => order.buyer_user_id === buyer.id));
 
   // A different customer sees nothing.
-  const other = getDb()
+  const other = await (await getDb())
     .prepare("SELECT id FROM users WHERE email = 'pay-seller@test.ng'")
     .get();
-  assert.equal(listOrdersForBuyer(other.id).length, 0);
+  assert.equal((await listOrdersForBuyer(other.id)).length, 0);
 
   // Direct lookup is scoped too.
-  assert.equal(getOrderForBuyer(other.id, mine[0].id), null);
-  assert.ok(getOrderForBuyer(buyer.id, mine[0].id));
+  assert.equal(await getOrderForBuyer(other.id, mine[0].id), null);
+  assert.ok(await getOrderForBuyer(buyer.id, mine[0].id));
 });
 
 test("orders without a delivery-on-delivery fee still owe the full total", async () => {
@@ -211,14 +215,14 @@ test("orders without a delivery-on-delivery fee still owe the full total", async
   });
   if ("error" in plainSeller) throw new Error(plainSeller.error);
 
-  const plainProduct = createProduct(plainSeller.user.id, {
+  const plainProduct = await createProduct(plainSeller.user.id, {
     name: "Plain Item",
     priceKobo: 1000000,
     publicationStatus: "published",
   });
-  const plainSlug = getShopProfile(plainSeller.user.id).shop_slug;
+  const plainSlug = (await getShopProfile(plainSeller.user.id)).shop_slug;
 
-  const result = createPublicOrder({
+  const result = await createPublicOrder({
     shopSlug: plainSlug,
     productSlug: plainProduct.slug,
     name: "Blessing Etim",
@@ -229,18 +233,19 @@ test("orders without a delivery-on-delivery fee still owe the full total", async
   });
 
   assert.equal(result.deliveryFeeKobo, 0);
-  const order = getOrderDetail(plainSeller.user.id, result.orderId);
+  const order = await getOrderDetail(plainSeller.user.id, result.orderId);
   assert.equal(order.delivery_fee_on_delivery, 0);
   assert.equal(amountDueOnline(order), order.total_kobo);
 });
 
-test("backfilling shop links ignores customer accounts", () => {
+test("backfilling shop links ignores customer accounts", async () => {
   // A customer created without a slug must stay without one.
-  const before = getDb()
+  const db = await getDb();
+  const before = await db
     .prepare("SELECT COUNT(*) AS c FROM users WHERE account_type = 'customer' AND shop_slug IS NOT NULL")
     .get();
-  ensureShopSlugs();
-  const after = getDb()
+  await ensureShopSlugs();
+  const after = await db
     .prepare("SELECT COUNT(*) AS c FROM users WHERE account_type = 'customer' AND shop_slug IS NOT NULL")
     .get();
   assert.equal(Number(after.c), Number(before.c));

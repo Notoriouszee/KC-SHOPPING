@@ -40,25 +40,29 @@ function sinceIso(minutes: number): string {
   return new Date(Date.now() - minutes * 60 * 1000).toISOString();
 }
 
-function countFor(column: "key" | "ip_hash", value: string, minutes: number): number {
-  const row = getDb()
+async function countFor(column: "key" | "ip_hash", value: string, minutes: number): Promise<number> {
+  const row = await (await getDb())
     .prepare(
       `SELECT COUNT(*) AS total FROM auth_attempts WHERE ${column} = ? AND created_at > ?`,
     )
-    .get(value, sinceIso(minutes)) as { total: number } | undefined;
+    .get<{ total: number }>(value, sinceIso(minutes));
   return Number(row?.total ?? 0);
 }
 
 /** True when this device/email pair, or this IP, has failed too often. */
-export function isLoginBlocked(key: string, ip: string): boolean {
+export async function isLoginBlocked(key: string, ip: string): Promise<boolean> {
   return (
-    countFor("key", key, LOGIN_WINDOW_MINUTES) >= LOGIN_MAX_FAILURES ||
-    countFor("ip_hash", ip, LOGIN_IP_WINDOW_MINUTES) >= LOGIN_MAX_FAILURES_PER_IP
+    (await countFor("key", key, LOGIN_WINDOW_MINUTES)) >= LOGIN_MAX_FAILURES ||
+    (await countFor("ip_hash", ip, LOGIN_IP_WINDOW_MINUTES)) >= LOGIN_MAX_FAILURES_PER_IP
   );
 }
 
-export function recordLoginFailure(key: string, ipHash: string, outcome: "failed" | "blocked"): void {
-  getDb()
+export async function recordLoginFailure(
+  key: string,
+  ipHash: string,
+  outcome: "failed" | "blocked",
+): Promise<void> {
+  await (await getDb())
     .prepare(
       "INSERT INTO auth_attempts (id, key, ip_hash, outcome, created_at) VALUES (?, ?, ?, ?, ?)",
     )
@@ -66,13 +70,13 @@ export function recordLoginFailure(key: string, ipHash: string, outcome: "failed
 }
 
 /** Clears this device's history for the account after a successful sign-in. */
-export function clearLoginFailures(key: string): void {
-  getDb().prepare("DELETE FROM auth_attempts WHERE key = ?").run(key);
+export async function clearLoginFailures(key: string): Promise<void> {
+  await (await getDb()).prepare("DELETE FROM auth_attempts WHERE key = ?").run(key);
 }
 
 /** Housekeeping for the maintenance script. */
-export function pruneAuthAttempts(olderThanDays = 30): number {
+export async function pruneAuthAttempts(olderThanDays = 30): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-  const result = getDb().prepare("DELETE FROM auth_attempts WHERE created_at < ?").run(cutoff);
+  const result = await (await getDb()).prepare("DELETE FROM auth_attempts WHERE created_at < ?").run(cutoff);
   return Number(result.changes ?? 0);
 }

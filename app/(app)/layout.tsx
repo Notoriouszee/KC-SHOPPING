@@ -12,11 +12,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Cheap idempotent backfill: any seller created before the storefront existed
   // gets a shop link the first time they open the dashboard.
-  ensureShopSlugs();
+  await ensureShopSlugs();
 
-  const subscription = subscriptionState(user.id);
-  const orders = orderStats(user.id);
-  const followUps = followUpStats(user.id);
+  const subscription = await subscriptionState(user.id);
+  const orders = await orderStats(user.id);
+  const followUps = await followUpStats(user.id);
 
   const groups: NavGroup[] = [
     {

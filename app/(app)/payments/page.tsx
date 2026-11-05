@@ -13,8 +13,8 @@ export const metadata: Metadata = { title: "Payments" };
 export default async function PaymentsPage() {
   const user = await requireUser();
 
-  const stats = orderStats(user.id);
-  const orders = listOrders(user.id, { limit: 500 });
+  const stats = await orderStats(user.id);
+  const orders = await listOrders(user.id, { limit: 500 });
   const outstanding = orders
     .filter((order) => order.payment_status === "unpaid" || order.payment_status === "partial")
     .filter((order) => order.status !== "cancelled");

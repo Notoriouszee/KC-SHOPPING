@@ -24,14 +24,14 @@ export type ProductInput = {
 
 type ProductRow = Omit<ProductWithImages, "images">;
 
-function attachImages(rows: ProductRow[]): ProductWithImages[] {
+async function attachImages(rows: ProductRow[]): Promise<ProductWithImages[]> {
   if (rows.length === 0) return [];
 
-  const db = getDb();
+  const db = await getDb();
   const ids = rows.map((row) => row.id);
   const placeholders = ids.map(() => "?").join(", ");
   const images = plainRows<ProductImage>(
-    db
+    await db
       .prepare(
         `SELECT * FROM product_images WHERE product_id IN (${placeholders}) ORDER BY position ASC, created_at ASC`,
       )
@@ -55,10 +55,10 @@ export type ProductFilters = {
   limit?: number;
 };
 
-export function listProducts(
+export async function listProducts(
   sellerId: string,
   filters: ProductFilters = {},
-): ProductWithImages[] {
+): Promise<ProductWithImages[]> {
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500);
   const where: string[] = ["seller_id = ?"];
   const params: (string | number)[] = [sellerId];
@@ -73,33 +73,39 @@ export function listProducts(
   }
   const query = filters.query?.trim();
   if (query) {
-    where.push("(name LIKE ? OR description LIKE ?)");
+    where.push("(LOWER(name) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))");
     params.push(`%${query}%`, `%${query}%`);
   }
 
   const rows = plainRows<ProductRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT * FROM products WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT ?`,
       )
       .all(...params, limit),
   );
 
-  return attachImages(rows);
+  return await attachImages(rows);
 }
 
-export function getProduct(sellerId: string, productId: string): ProductWithImages | null {
+export async function getProduct(
+  sellerId: string,
+  productId: string,
+): Promise<ProductWithImages | null> {
   const row = plainRow<ProductRow>(
-    getDb().prepare("SELECT * FROM products WHERE id = ? AND seller_id = ?").get(productId, sellerId),
+    await (await getDb()).prepare("SELECT * FROM products WHERE id = ? AND seller_id = ?").get(productId, sellerId),
   );
   if (!row) return null;
-  return attachImages([row])[0] ?? null;
+  return (await attachImages([row]))[0] ?? null;
 }
 
 /** Products a visitor may see on a shop page. */
-export function listPublishedProducts(sellerId: string, limit = 200): ProductWithImages[] {
+export async function listPublishedProducts(
+  sellerId: string,
+  limit = 200,
+): Promise<ProductWithImages[]> {
   const rows = plainRows<ProductRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT * FROM products
          WHERE seller_id = ? AND publication_status = 'published'
@@ -107,7 +113,7 @@ export function listPublishedProducts(sellerId: string, limit = 200): ProductWit
       )
       .all(sellerId, Math.min(Math.max(limit, 1), 500)),
   );
-  return attachImages(rows);
+  return await attachImages(rows);
 }
 
 export type PublicProductHit = {
@@ -125,21 +131,32 @@ export type PublicProductHit = {
  * Public catalogue search used by the marketplace search box. Only published
  * products belonging to a live shop are findable.
  */
-export function searchPublicProducts(query: string, limit = 40): PublicProductHit[] {
+export async function searchPublicProducts(
+  query: string,
+  limit = 40,
+): Promise<PublicProductHit[]> {
   const term = query.trim();
   if (term === "") return [];
 
-  return runCatalogueQuery(`AND (p.name LIKE ? OR p.description LIKE ?)`, [`%${term}%`, `%${term}%`], limit);
+  return await runCatalogueQuery(
+    `AND (LOWER(p.name) LIKE LOWER(?) OR LOWER(p.description) LIKE LOWER(?))`,
+    [`%${term}%`, `%${term}%`],
+    limit,
+  );
 }
 
 /** Everything on show, newest first — used by the collections page. */
-export function listPublicCatalogue(limit = 60): PublicProductHit[] {
-  return runCatalogueQuery("", [], limit);
+export async function listPublicCatalogue(limit = 60): Promise<PublicProductHit[]> {
+  return await runCatalogueQuery("", [], limit);
 }
 
-function runCatalogueQuery(filter: string, params: string[], limit: number): PublicProductHit[] {
+async function runCatalogueQuery(
+  filter: string,
+  params: string[],
+  limit: number,
+): Promise<PublicProductHit[]> {
   return plainRows<PublicProductHit>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT p.id, p.name, p.slug, p.price_kobo, p.availability,
                 u.shop_slug,
@@ -163,12 +180,15 @@ function runCatalogueQuery(filter: string, params: string[], limit: number): Pub
  * Resolves a public product URL. Drafts, deleted products and shops without a
  * live slug all resolve to null — the page must not distinguish between them.
  */
-export function getPublicProduct(shopSlug: string, productSlug: string): PublicProduct | null {
-  const shop = getPublicShop(shopSlug);
+export async function getPublicProduct(
+  shopSlug: string,
+  productSlug: string,
+): Promise<PublicProduct | null> {
+  const shop = await getPublicShop(shopSlug);
   if (!shop) return null;
 
   const row = plainRow<ProductRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT * FROM products
          WHERE seller_id = ? AND lower(slug) = lower(?) AND publication_status = 'published'`,
@@ -177,28 +197,32 @@ export function getPublicProduct(shopSlug: string, productSlug: string): PublicP
   );
   if (!row) return null;
 
-  const withImages = attachImages([row])[0];
+  const withImages = (await attachImages([row]))[0];
   if (!withImages) return null;
 
   return { ...withImages, shop };
 }
 
 /** Case-insensitive per-seller uniqueness with -2, -3 suffixes on collision. */
-export function uniqueProductSlug(sellerId: string, name: string, exceptId?: string): string {
+export async function uniqueProductSlug(
+  sellerId: string,
+  name: string,
+  exceptId?: string,
+): Promise<string> {
   const base = normaliseProductSlug(name) || "product";
-  const db = getDb();
-  const taken = (candidate: string): boolean => {
-    const row = db
+  const db = await getDb();
+  const taken = async (candidate: string): Promise<boolean> => {
+    const row = (await db
       .prepare("SELECT id FROM products WHERE seller_id = ? AND lower(slug) = lower(?)")
-      .get(sellerId, candidate) as { id: string } | undefined;
+      .get(sellerId, candidate)) as { id: string } | undefined;
     return Boolean(row && row.id !== exceptId);
   };
 
-  if (!productSlugProblem(base) && !taken(base)) return base;
+  if (!productSlugProblem(base) && !(await taken(base))) return base;
 
   for (let index = 2; index < 500; index += 1) {
     const candidate = `${base.slice(0, 56)}-${index}`;
-    if (!productSlugProblem(candidate) && !taken(candidate)) return candidate;
+    if (!productSlugProblem(candidate) && !(await taken(candidate))) return candidate;
   }
 
   return `${base.slice(0, 50)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -240,13 +264,16 @@ function validateInput(input: ProductInput): {
   return { name, priceKobo: input.priceKobo, description, availability, publicationStatus };
 }
 
-export function createProduct(sellerId: string, input: ProductInput): ProductWithImages {
+export async function createProduct(
+  sellerId: string,
+  input: ProductInput,
+): Promise<ProductWithImages> {
   const values = validateInput(input);
   const id = newId();
   const timestamp = nowIso();
-  const slug = uniqueProductSlug(sellerId, values.name);
+  const slug = await uniqueProductSlug(sellerId, values.name);
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO products (
          id, seller_id, name, slug, description, price_kobo,
@@ -267,17 +294,17 @@ export function createProduct(sellerId: string, input: ProductInput): ProductWit
       timestamp,
     );
 
-  const created = getProduct(sellerId, id);
+  const created = await getProduct(sellerId, id);
   if (!created) throw new Error("Product could not be created.");
   return created;
 }
 
-export function updateProduct(
+export async function updateProduct(
   sellerId: string,
   productId: string,
   input: ProductInput,
-): ProductWithImages {
-  const existing = getProduct(sellerId, productId);
+): Promise<ProductWithImages> {
+  const existing = await getProduct(sellerId, productId);
   if (!existing) throw new ValidationError([{ field: "id", message: "Product not found." }]);
 
   const values = validateInput(input);
@@ -290,7 +317,7 @@ export function updateProduct(
       ? (existing.published_at ?? timestamp)
       : null;
 
-  getDb()
+  await (await getDb())
     .prepare(
       `UPDATE products
        SET name = ?, description = ?, price_kobo = ?, availability = ?,
@@ -309,47 +336,47 @@ export function updateProduct(
       sellerId,
     );
 
-  const updated = getProduct(sellerId, productId);
+  const updated = await getProduct(sellerId, productId);
   if (!updated) throw new Error("Product could not be updated.");
   return updated;
 }
 
-export function setPublication(
+export async function setPublication(
   sellerId: string,
   productId: string,
   status: PublicationStatus,
-): ProductWithImages {
+): Promise<ProductWithImages> {
   if (!isPublicationStatus(status)) {
     throw new ValidationError([{ field: "status", message: "Unknown publication state." }]);
   }
-  const existing = getProduct(sellerId, productId);
+  const existing = await getProduct(sellerId, productId);
   if (!existing) throw new ValidationError([{ field: "id", message: "Product not found." }]);
 
   const timestamp = nowIso();
   const publishedAt =
     status === "published" ? (existing.published_at ?? timestamp) : null;
 
-  getDb()
+  await (await getDb())
     .prepare(
       "UPDATE products SET publication_status = ?, published_at = ?, updated_at = ? WHERE id = ? AND seller_id = ?",
     )
     .run(status, publishedAt, timestamp, productId, sellerId);
 
-  const updated = getProduct(sellerId, productId);
+  const updated = await getProduct(sellerId, productId);
   if (!updated) throw new Error("Product could not be updated.");
   return updated;
 }
 
-export function setAvailability(
+export async function setAvailability(
   sellerId: string,
   productId: string,
   availability: Availability,
-): ProductWithImages {
+): Promise<ProductWithImages> {
   if (!isAvailability(availability)) {
     throw new ValidationError([{ field: "availability", message: "Unknown availability." }]);
   }
 
-  const result = getDb()
+  const result = await (await getDb())
     .prepare("UPDATE products SET availability = ?, updated_at = ? WHERE id = ? AND seller_id = ?")
     .run(availability, nowIso(), productId, sellerId);
 
@@ -357,7 +384,7 @@ export function setAvailability(
     throw new ValidationError([{ field: "id", message: "Product not found." }]);
   }
 
-  const updated = getProduct(sellerId, productId);
+  const updated = await getProduct(sellerId, productId);
   if (!updated) throw new Error("Product could not be updated.");
   return updated;
 }
@@ -366,33 +393,28 @@ export function setAvailability(
  * Deletes a product and returns the image URLs that were attached, so the caller
  * can remove the stored files as well.
  */
-export function deleteProduct(sellerId: string, productId: string): string[] {
-  const existing = getProduct(sellerId, productId);
+export async function deleteProduct(sellerId: string, productId: string): Promise<string[]> {
+  const existing = await getProduct(sellerId, productId);
   if (!existing) throw new ValidationError([{ field: "id", message: "Product not found." }]);
 
-  const db = getDb();
-  db.exec("BEGIN");
-  try {
-    db.prepare("DELETE FROM product_images WHERE product_id = ? AND seller_id = ?").run(
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.prepare("DELETE FROM product_images WHERE product_id = ? AND seller_id = ?").run(
       productId,
       sellerId,
     );
-    db.prepare("DELETE FROM products WHERE id = ? AND seller_id = ?").run(productId, sellerId);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+    await tx.prepare("DELETE FROM products WHERE id = ? AND seller_id = ?").run(productId, sellerId);
+  });
 
   return existing.images.map((image) => image.url);
 }
 
-export function addImage(
+export async function addImage(
   sellerId: string,
   productId: string,
   image: { url: string; alt?: string | null; width?: number | null; height?: number | null },
-): ProductImage {
-  const product = getProduct(sellerId, productId);
+): Promise<ProductImage> {
+  const product = await getProduct(sellerId, productId);
   if (!product) throw new ValidationError([{ field: "id", message: "Product not found." }]);
   if (product.images.length >= MAX_PRODUCT_IMAGES) {
     throw new ValidationError([
@@ -407,7 +429,7 @@ export function addImage(
   const nextPosition =
     product.images.reduce((max, entry) => Math.max(max, entry.position), -1) + 1;
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO product_images (id, product_id, seller_id, url, alt, position, width, height, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -425,56 +447,58 @@ export function addImage(
     );
 
   const created = plainRow<ProductImage>(
-    getDb().prepare("SELECT * FROM product_images WHERE id = ? AND seller_id = ?").get(id, sellerId),
+    await (await getDb()).prepare("SELECT * FROM product_images WHERE id = ? AND seller_id = ?").get(id, sellerId),
   );
   if (!created) throw new Error("Image could not be saved.");
   return created;
 }
 
 /** Removes one image; returns its URL so the caller can delete the file. */
-export function removeImage(sellerId: string, imageId: string): { url: string; productId: string } {
+export async function removeImage(
+  sellerId: string,
+  imageId: string,
+): Promise<{ url: string; productId: string }> {
   const row = plainRow<ProductImage & { product_id: string }>(
-    getDb()
+    await (await getDb())
       .prepare("SELECT * FROM product_images WHERE id = ? AND seller_id = ?")
       .get(imageId, sellerId),
   );
   if (!row) throw new ValidationError([{ field: "image", message: "Image not found." }]);
 
-  getDb().prepare("DELETE FROM product_images WHERE id = ? AND seller_id = ?").run(imageId, sellerId);
+  await (await getDb())
+    .prepare("DELETE FROM product_images WHERE id = ? AND seller_id = ?")
+    .run(imageId, sellerId);
   return { url: row.url, productId: row.product_id };
 }
 
 /** Promotes an image to cover (position 0) and pushes the rest down. */
-export function setCoverImage(sellerId: string, productId: string, imageId: string): void {
-  const product = getProduct(sellerId, productId);
+export async function setCoverImage(
+  sellerId: string,
+  productId: string,
+  imageId: string,
+): Promise<void> {
+  const product = await getProduct(sellerId, productId);
   if (!product) throw new ValidationError([{ field: "id", message: "Product not found." }]);
 
   const image = product.images.find((entry) => entry.id === imageId);
   if (!image) throw new ValidationError([{ field: "image", message: "Image not found." }]);
 
-  const db = getDb();
-  db.exec("BEGIN");
-  try {
-    const reorder = db.prepare(
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    const reorder = tx.prepare(
       "UPDATE product_images SET position = ? WHERE id = ? AND seller_id = ?",
     );
     let position = 1;
     for (const entry of product.images) {
       if (entry.id === imageId) continue;
-      reorder.run(position, entry.id, sellerId);
+      await reorder.run(position, entry.id, sellerId);
       position += 1;
     }
-    reorder.run(0, imageId, sellerId);
-    db.prepare("UPDATE products SET updated_at = ? WHERE id = ? AND seller_id = ?").run(
-      nowIso(),
-      productId,
-      sellerId,
-    );
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+    await reorder.run(0, imageId, sellerId);
+    await tx
+      .prepare("UPDATE products SET updated_at = ? WHERE id = ? AND seller_id = ?")
+      .run(nowIso(), productId, sellerId);
+  });
 }
 
 export type ProductStats = {
@@ -484,8 +508,8 @@ export type ProductStats = {
   outOfStock: number;
 };
 
-export function productStats(sellerId: string): ProductStats {
-  const row = getDb()
+export async function productStats(sellerId: string): Promise<ProductStats> {
+  const row = (await (await getDb())
     .prepare(
       `SELECT
          COUNT(*) AS total,
@@ -494,7 +518,7 @@ export function productStats(sellerId: string): ProductStats {
          SUM(CASE WHEN availability = 'out_of_stock' THEN 1 ELSE 0 END) AS out_of_stock
        FROM products WHERE seller_id = ?`,
     )
-    .get(sellerId) as unknown as {
+    .get(sellerId)) as unknown as {
     total: number | null;
     published: number | null;
     drafts: number | null;

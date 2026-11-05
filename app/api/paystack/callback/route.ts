@@ -25,12 +25,12 @@ export async function GET(request: Request) {
 
     const sellerId =
       typeof verified.metadata?.seller_id === "string" ? verified.metadata.seller_id : "";
-    const seller = sellerId ? findUserById(sellerId) : null;
+    const seller = sellerId ? await findUserById(sellerId) : null;
 
     const paidEnough = verified.amountKobo >= planAmountKobo();
 
     if (verified.status === "success" && paidEnough && seller && seller.account_type === "seller") {
-      activateSubscription(seller.id, {
+      await activateSubscription(seller.id, {
         reference: verified.reference,
         amountKobo: verified.amountKobo,
       });

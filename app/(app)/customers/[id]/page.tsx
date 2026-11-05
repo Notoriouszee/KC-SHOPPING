@@ -19,13 +19,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   const user = await requireUser();
   const { id } = await params;
 
-  const customer = getCustomer(user.id, id);
+  const customer = await getCustomer(user.id, id);
   if (!customer) notFound();
 
-  const orders = listOrders(user.id, { customerId: customer.id, limit: 100 });
-  const followUps = listFollowUps(user.id, { status: "open", limit: 100 }).filter(
-    (followUp) => followUp.customer_id === customer.id,
-  );
+  const orders = await listOrders(user.id, { customerId: customer.id, limit: 100 });
+  const followUps = (
+    await listFollowUps(user.id, { status: "open", limit: 100 })
+  ).filter((followUp) => followUp.customer_id === customer.id);
   const paidTotal = orders
     .filter((order) => order.payment_status === "paid")
     .reduce((sum, order) => sum + order.total_kobo, 0);

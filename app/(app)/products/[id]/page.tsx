@@ -35,12 +35,12 @@ export default async function EditProductPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const product = getProduct(user.id, id);
+  const product = await getProduct(user.id, id);
   if (!product) notFound();
 
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   const origin = appUrl();
-  const performance = productPerformance(user.id, product.id, 30);
+  const performance = await productPerformance(user.id, product.id, 30);
   const published = product.publication_status === "published";
   const publicLink =
     shop?.shop_slug && published ? productUrl(shop.shop_slug, product.slug, origin) : null;

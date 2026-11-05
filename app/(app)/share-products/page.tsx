@@ -15,14 +15,14 @@ export const metadata: Metadata = { title: "Share Products" };
 
 export default async function ShareProductsPage() {
   const user = await requireUser();
-  const shopProfile = getShopProfile(user.id);
-  const shop = shopProfile?.shop_slug ? getPublicShop(shopProfile.shop_slug) : null;
+  const shopProfile = await getShopProfile(user.id);
+  const shop = shopProfile?.shop_slug ? await getPublicShop(shopProfile.shop_slug) : null;
   const origin = appUrl();
 
-  const products = listProducts(user.id, { status: "published", limit: 300 });
+  const products = await listProducts(user.id, { status: "published", limit: 300 });
   const link = shop ? shopUrl(shop.shop_slug, origin) : null;
-  const performance = shopPerformance(user.id, 30);
-  const sources = sourceBreakdown(user.id, 30);
+  const performance = await shopPerformance(user.id, 30);
+  const sources = await sourceBreakdown(user.id, 30);
   const totalViews = sources.reduce((sum, row) => sum + row.views, 0);
 
   return (

@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 export default async function OrderConfirmationPage({ params }: Props) {
   const { token } = await params;
-  const order = getPublicOrderByToken(token);
+  const order = await getPublicOrderByToken(token);
 
   if (!order) notFound();
 

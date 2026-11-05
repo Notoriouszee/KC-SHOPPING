@@ -25,7 +25,7 @@ export async function updateProfileAction(
     const phoneRaw = formText(formData, "phone");
     const phone = phoneRaw ? requirePhone(phoneRaw) : null;
 
-    updateProfile(user.id, { ownerName, businessName, phone });
+    await updateProfile(user.id, { ownerName, businessName, phone });
   } catch (error) {
     return failure(error, "We could not save your profile.");
   }

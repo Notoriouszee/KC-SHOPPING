@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { shopSlug, productSlug } = await params;
-  const product = getPublicProduct(shopSlug, productSlug);
+  const product = await getPublicProduct(shopSlug, productSlug);
 
   if (!product) {
     // Never index a missing or unpublished product.
@@ -33,11 +33,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicProductPage({ params, searchParams }: Props) {
   const { shopSlug, productSlug } = await params;
   const { src } = await searchParams;
-  const product = getPublicProduct(shopSlug, productSlug);
+  const product = await getPublicProduct(shopSlug, productSlug);
 
   if (!product) {
     // Keep old product links working when the seller renamed their shop link.
-    const redirect = resolveRetiredSlug(shopSlug);
+    const redirect = await resolveRetiredSlug(shopSlug);
     if (redirect) permanentRedirect(`/product/${redirect.current_slug}/${productSlug}`);
     notFound();
   }

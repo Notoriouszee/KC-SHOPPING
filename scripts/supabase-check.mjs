@@ -49,7 +49,7 @@ async function check(label, fn) {
 console.log("\nSchema and policies");
 
 const expectedTables = [
-  "profiles",
+  "users",
   "customers",
   "orders",
   "order_items",

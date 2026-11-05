@@ -18,13 +18,13 @@ export const metadata: Metadata = { title: "My Shop" };
 
 export default async function MyShopPage() {
   const user = await requireUser();
-  let shop = getShopProfile(user.id);
+  let shop = await getShopProfile(user.id);
 
   // Every seller must have a working shop link; older accounts are backfilled
   // on first visit rather than being shown a broken page.
   if (shop && !shop.shop_slug) {
-    assignInitialSlug(user.id, shop.business_name);
-    shop = getShopProfile(user.id);
+    await assignInitialSlug(user.id, shop.business_name);
+    shop = await getShopProfile(user.id);
   }
 
   if (!shop || !shop.shop_slug) {
@@ -41,8 +41,8 @@ export default async function MyShopPage() {
 
   const origin = appUrl();
   const publicUrl = shopUrl(shop.shop_slug, origin);
-  const cooldown = slugChangeCooldown(user.id);
-  const history = listSlugHistory(user.id);
+  const cooldown = await slugChangeCooldown(user.id);
+  const history = await listSlugHistory(user.id);
 
   return (
     <div>

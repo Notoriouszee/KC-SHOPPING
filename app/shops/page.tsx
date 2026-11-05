@@ -20,7 +20,7 @@ export default async function ShopsPage({
   const user = await getCurrentUser();
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const shops = listPublicShops({ query: query || undefined, limit: 60 });
+  const shops = await listPublicShops({ query: query || undefined, limit: 60 });
 
   return (
     <div className="min-h-screen bg-slate-50">

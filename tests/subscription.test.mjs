@@ -31,31 +31,31 @@ const seller = await signUp({
 
 if ("error" in seller) throw new Error(seller.error);
 
-test("a new seller starts on a free month", () => {
-  const state = subscriptionState(seller.user.id);
+test("a new seller starts on a free month", async () => {
+  const state = await subscriptionState(seller.user.id);
   assert.equal(state.status, "trialing");
   assert.equal(state.active, true);
   assert.ok(state.daysLeft >= TRIAL_DAYS - 1 && state.daysLeft <= TRIAL_DAYS);
 
-  const subscription = getSubscription(seller.user.id);
+  const subscription = await getSubscription(seller.user.id);
   assert.ok(subscription);
   assert.equal(subscription.status, "trialing");
   assert.equal(subscription.amount_kobo, 250_000);
 });
 
-test("ensureSubscription is idempotent", () => {
-  const first = ensureSubscription(seller.user.id);
-  const second = ensureSubscription(seller.user.id);
+test("ensureSubscription is idempotent", async () => {
+  const first = await ensureSubscription(seller.user.id);
+  const second = await ensureSubscription(seller.user.id);
   assert.equal(first.created_at, second.created_at);
 
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare("SELECT COUNT(*) AS c FROM seller_subscriptions WHERE seller_id = ?")
     .get(seller.user.id);
   assert.equal(Number(rows.c), 1);
 });
 
-test("after the trial a seller is past due and read-only", () => {
-  const subscription = getSubscription(seller.user.id);
+test("after the trial a seller is past due and read-only", async () => {
+  const subscription = await getSubscription(seller.user.id);
   const afterTrial = evaluate(
     { ...subscription, trial_ends_at: new Date(Date.now() - 1000).toISOString() },
     Date.now(),
@@ -66,10 +66,10 @@ test("after the trial a seller is past due and read-only", () => {
   assert.equal(afterTrial.daysLeft, 0);
 });
 
-test("paying extends the period by a month and reactivates", () => {
-  const before = getSubscription(seller.user.id);
+test("paying extends the period by a month and reactivates", async () => {
+  const before = await getSubscription(seller.user.id);
 
-  const activated = activateSubscription(seller.user.id, {
+  const activated = await activateSubscription(seller.user.id, {
     reference: "kc_sub_test_1",
     amountKobo: 250_000,
   });
@@ -87,15 +87,15 @@ test("paying extends the period by a month and reactivates", () => {
   assert.equal(state.status, "active");
   assert.equal(state.active, true);
   assert.ok(state.daysLeft >= PLAN_DAYS - 1);
-  assert.equal(hasActiveSubscription(seller.user.id), true);
+  assert.equal(await hasActiveSubscription(seller.user.id), true);
 });
 
-test("paying early adds days instead of losing them", () => {
-  const first = getSubscription(seller.user.id);
+test("paying early adds days instead of losing them", async () => {
+  const first = await getSubscription(seller.user.id);
   assert.ok(first.current_period_end);
   const firstEnd = new Date(first.current_period_end).getTime();
 
-  const renewed = activateSubscription(seller.user.id, {
+  const renewed = await activateSubscription(seller.user.id, {
     reference: "kc_sub_test_2",
     amountKobo: 250_000,
   });
@@ -105,8 +105,8 @@ test("paying early adds days instead of losing them", () => {
   assert.equal(added, PLAN_DAYS);
 });
 
-test("cancelling keeps the period but blocks renewal", () => {
-  const cancelled = cancelSubscription(seller.user.id);
+test("cancelling keeps the period but blocks renewal", async () => {
+  const cancelled = await cancelSubscription(seller.user.id);
   assert.equal(cancelled.status, "cancelled");
 
   const state = evaluate(cancelled, Date.now());

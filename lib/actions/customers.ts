@@ -21,7 +21,7 @@ export async function createCustomerAction(
 ): Promise<ActionState> {
   const user = await requireUser();
   try {
-    createCustomer(user.id, readCustomer(formData));
+    await createCustomer(user.id, readCustomer(formData));
   } catch (error) {
     return failure(error, "We could not save that customer.");
   }
@@ -39,7 +39,7 @@ export async function updateCustomerAction(
   const customerId = formText(formData, "customerId");
 
   try {
-    updateCustomer(user.id, customerId, readCustomer(formData));
+    await updateCustomer(user.id, customerId, readCustomer(formData));
   } catch (error) {
     return failure(error, "We could not update that customer.");
   }

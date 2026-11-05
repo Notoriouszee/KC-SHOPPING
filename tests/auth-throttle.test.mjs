@@ -37,66 +37,76 @@ test("login keys hide the email and the IP address", () => {
   assert.notEqual(loginKey(IP, EMAIL, tomorrow), key);
 });
 
-test("repeated failures lock the account for that device", () => {
+test("repeated failures lock the account for that device", async () => {
   const key = loginKey(IP, EMAIL);
   const ip = ipKey(IP);
-  clearLoginFailures(key);
+  await clearLoginFailures(key);
 
-  assert.equal(isLoginBlocked(key, ip), false);
+  assert.equal(await isLoginBlocked(key, ip), false);
 
   for (let index = 0; index < LOGIN_MAX_FAILURES; index += 1) {
-    recordLoginFailure(key, ip, "failed");
+    await recordLoginFailure(key, ip, "failed");
   }
 
-  assert.equal(isLoginBlocked(key, ip), true);
+  assert.equal(await isLoginBlocked(key, ip), true);
 
   // A different device is unaffected.
   const otherIp = ipKey("203.0.113.77");
-  assert.equal(isLoginBlocked(loginKey("203.0.113.77", EMAIL), otherIp), false);
+  assert.equal(await isLoginBlocked(loginKey("203.0.113.77", EMAIL), otherIp), false);
 
   // So is the same device with a different account.
-  assert.equal(isLoginBlocked(loginKey(IP, "someone-else@test.ng"), ip), false);
+  assert.equal(await isLoginBlocked(loginKey(IP, "someone-else@test.ng"), ip), false);
 });
 
-test("a successful sign-in clears the device's failures", () => {
+test("a successful sign-in clears the device's failures", async () => {
   const key = loginKey(IP, EMAIL);
   const ip = ipKey(IP);
-  assert.equal(isLoginBlocked(key, ip), true);
+  assert.equal(await isLoginBlocked(key, ip), true);
 
-  clearLoginFailures(key);
-  assert.equal(isLoginBlocked(key, ip), false);
+  await clearLoginFailures(key);
+  assert.equal(await isLoginBlocked(key, ip), false);
   assert.equal(
     Number(
-      getDb().prepare("SELECT COUNT(*) AS c FROM auth_attempts WHERE key = ?").get(key).c,
+      (
+        await (await getDb())
+          .prepare("SELECT COUNT(*) AS c FROM auth_attempts WHERE key = ?")
+          .get(key)
+      ).c,
     ),
     0,
   );
 });
 
-test("a single IP cannot spread failures across many accounts", () => {
+test("a single IP cannot spread failures across many accounts", async () => {
   const sharedIp = "203.0.113.200";
   const ip = ipKey(sharedIp);
 
   // One failure per account, many accounts, one IP.
   for (let index = 0; index < LOGIN_MAX_FAILURES_PER_IP; index += 1) {
-    recordLoginFailure(loginKey(sharedIp, `user${index}@test.ng`), ip, "failed");
+    await recordLoginFailure(loginKey(sharedIp, `user${index}@test.ng`), ip, "failed");
   }
 
   // The IP itself is now blocked, even for a fresh account.
-  assert.equal(isLoginBlocked(loginKey(sharedIp, "fresh@test.ng"), ip), true);
+  assert.equal(await isLoginBlocked(loginKey(sharedIp, "fresh@test.ng"), ip), true);
 });
 
-test("old attempt rows are pruned", () => {
+test("old attempt rows are pruned", async () => {
   const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
-  getDb()
+  await (await getDb())
     .prepare(
       "INSERT INTO auth_attempts (id, key, ip_hash, outcome, created_at) VALUES (?, ?, ?, 'failed', ?)",
     )
     .run("00000000-0000-4000-8000-0000000000aa", "old-key", "old-ip", old);
 
-  assert.ok(pruneAuthAttempts(30) >= 1);
+  assert.ok((await pruneAuthAttempts(30)) >= 1);
   assert.equal(
-    Number(getDb().prepare("SELECT COUNT(*) AS c FROM auth_attempts WHERE key = 'old-key'").get().c),
+    Number(
+      (
+        await (await getDb())
+          .prepare("SELECT COUNT(*) AS c FROM auth_attempts WHERE key = 'old-key'")
+          .get()
+      ).c,
+    ),
     0,
   );
 });

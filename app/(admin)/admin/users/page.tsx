@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: "Admin users" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  const shops = adminShops(200);
-  const customers = adminCustomers(200);
+  const shops = await adminShops(200);
+  const customers = await adminCustomers(200);
 
   return (
     <div className="space-y-6">

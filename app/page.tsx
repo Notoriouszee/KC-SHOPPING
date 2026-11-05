@@ -35,12 +35,14 @@ function ShareIcons() {
 
 export default async function MarketplaceHomePage() {
   const user = await getCurrentUser();
-  const shops = listPublicShops({ limit: 9 });
+  const shops = await listPublicShops({ limit: 9 });
 
-  const withProducts = shops.map((shop) => ({
-    shop,
-    products: listPublishedProducts(shop.id, 3),
-  }));
+  const withProducts = await Promise.all(
+    shops.map(async (shop) => ({
+      shop,
+      products: await listPublishedProducts(shop.id, 3),
+    })),
+  );
 
   const trending = withProducts.flatMap(({ shop, products }) => products.map((product) => ({ shop, product }))).slice(0, 4);
   const featuredSellers = withProducts.slice(0, 2);

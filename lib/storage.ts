@@ -4,13 +4,69 @@ import { join, resolve, sep } from "node:path";
 import { imageDimensions } from "./domain/image-dimensions";
 
 /**
- * Local image storage.
+ * Image storage.
  *
- * Production would use Supabase Storage (bucket `shop-assets`, owner-scoped
- * write policies). Locally we write to `data/uploads` and serve through the
- * `/media/...` route handler, which keeps uploads out of the build output and
- * lets us control content-type headers.
+ * Two backends:
+ *  - **supabase** — Supabase Storage. Used in production, where the deployment
+ *    filesystem is read-only. Public buckets return a public URL; the private
+ *    receipts bucket is served through our own `/media` route.
+ *  - **local** — `data/uploads`, served by the `/media` route. Local development
+ *    only.
  */
+
+export type StorageBackend = "supabase" | "local";
+
+export const BUCKET_BY_FOLDER: Record<string, string> = {
+  "shop-logos": "shop-assets",
+  "product-images": "product-images",
+  "payment-receipts": "payment-receipts",
+};
+
+const PRIVATE_FOLDERS = new Set(["payment-receipts"]);
+
+function supabaseConfigured(): boolean {
+  return Boolean(
+    (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+}
+
+export function storageBackend(): StorageBackend {
+  const explicit = (process.env.STORAGE_BACKEND ?? "").trim().toLowerCase();
+  if (explicit === "supabase" || explicit === "s3") return "supabase";
+  if (explicit === "local" || explicit === "filesystem") return "local";
+
+  // Production must not depend on the deployment filesystem.
+  if (process.env.NODE_ENV === "production") {
+    if (!supabaseConfigured()) {
+      throw new Error(
+        "Image storage is not configured for production. Set SUPABASE_URL and " +
+          "SUPABASE_SERVICE_ROLE_KEY (or STORAGE_BACKEND=local for development only).",
+      );
+    }
+    return "supabase";
+  }
+
+  return supabaseConfigured() && process.env.STORAGE_BACKEND === "supabase" ? "supabase" : "local";
+}
+
+let adminClient: import("@supabase/supabase-js").SupabaseClient | null = null;
+
+async function storageClient() {
+  if (adminClient) return adminClient;
+
+  const url = (process.env.SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Supabase Storage is not configured.");
+
+  const { createClient } = await import("@supabase/supabase-js");
+  adminClient = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return adminClient;
+}
+
+function supabaseUrl(): string {
+  return (process.env.SUPABASE_URL ?? "").replace(/\/+$/, "");
+}
 
 export const UPLOAD_ROOT = () =>
   process.env.ORDERPILOT_UPLOAD_ROOT
@@ -71,9 +127,9 @@ export function detectImageType(bytes: Uint8Array): DetectedImage | null {
 }
 
 export type SaveImageOptions = {
-  /** Sub-folder under data/uploads, e.g. "shop-logos". */
+  /** Sub-folder, e.g. "shop-logos". Also selects the storage bucket. */
   folder: string;
-  /** Used to build a collision-free, non-guessable file name. */
+  /** Used to build a collision-free, non-guessable object name. */
   ownerId: string;
   maxBytes?: number;
 };
@@ -86,9 +142,19 @@ export type SavedImage = {
   height: number | null;
 };
 
+function bucketFor(folder: string): string {
+  return BUCKET_BY_FOLDER[folder] ?? "shop-assets";
+}
+
+function isPrivateFolder(folder: string): boolean {
+  return PRIVATE_FOLDERS.has(folder);
+}
+
 /**
- * Validates and stores an uploaded image. Returns a root-relative URL for the
- * `/media` route. Throws `ValidationError`-shaped errors via the caller.
+ * Validates and stores an uploaded image.
+ *
+ * Returns a public URL for public buckets and a root-relative `/media/...` URL
+ * for private ones (served by the media route with the service role).
  */
 export async function saveImage(
   file: File,
@@ -110,11 +176,35 @@ export async function saveImage(
 
   const safeOwner = options.ownerId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40) || "owner";
   const fileName = `${safeOwner}-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}.${detected.extension}`;
+  const size = imageDimensions(buffer);
+
+  if (storageBackend() === "supabase") {
+    const bucket = bucketFor(options.folder);
+    const key = `${safeOwner}/${fileName}`;
+    const client = await storageClient();
+
+    const { error } = await client.storage.from(bucket).upload(key, buffer, {
+      contentType: detected.mime,
+      upsert: false,
+      cacheControl: "31536000",
+    });
+
+    if (error) return { error: `We could not store that image: ${error.message}` };
+
+    return {
+      url: isPrivateFolder(options.folder)
+        ? `/media/${options.folder}/${key}`
+        : `${supabaseUrl()}/storage/v1/object/public/${bucket}/${key}`,
+      bytes: buffer.byteLength,
+      mime: detected.mime,
+      width: size?.width ?? null,
+      height: size?.height ?? null,
+    };
+  }
+
   const directory = join(UPLOAD_ROOT(), options.folder);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, fileName), buffer);
-
-  const size = imageDimensions(buffer);
 
   return {
     url: `/media/${options.folder}/${fileName}`,
@@ -125,10 +215,51 @@ export async function saveImage(
   };
 }
 
-/** Deletes a previously stored image, ignoring anything outside our media root. */
+/**
+ * Splits a stored image URL into a bucket and object key.
+ *
+ * Handles the three shapes this app produces:
+ *   /media/<folder>/<file>                                  (local, private)
+ *   /media/<folder>/<owner>/<file>                          (supabase, private)
+ *   https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<key>
+ */
+export function parseStoredUrl(
+  url: string,
+): { bucket: string; key: string; folder: string } | null {
+  if (url.startsWith("/media/")) {
+    const segments = url.slice("/media/".length).split("/").filter(Boolean);
+    const [folder, ...rest] = segments;
+    if (!folder || rest.length === 0) return null;
+    return { bucket: bucketFor(folder), key: rest.join("/"), folder };
+  }
+
+  const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+  if (match) {
+    const [, bucket, key] = match;
+    if (!bucket || !key) return null;
+    return { bucket, key, folder: Object.keys(BUCKET_BY_FOLDER).find((f) => BUCKET_BY_FOLDER[f] === bucket) ?? "" };
+  }
+
+  return null;
+}
+
+/** Deletes a previously stored image, ignoring anything we do not manage. */
 export async function deleteStoredImage(url: string | null | undefined): Promise<void> {
-  if (!url || !url.startsWith("/media/")) return;
-  const target = resolveMediaPath(url.replace(/^\/media\//, "").split("/"));
+  if (!url) return;
+  const parsed = parseStoredUrl(url);
+  if (!parsed) return;
+
+  if (storageBackend() === "supabase") {
+    try {
+      const client = await storageClient();
+      await client.storage.from(parsed.bucket).remove([parsed.key]);
+    } catch {
+      // Best effort: a missing object must not block the caller.
+    }
+    return;
+  }
+
+  const target = resolveMediaPath([parsed.folder, ...parsed.key.split("/")]);
   if (!target) return;
   try {
     await unlink(target);
@@ -165,7 +296,28 @@ export function contentTypeForPath(path: string): string {
 
 export type StoredFile = { bytes: Buffer; contentType: string };
 
+/**
+ * Reads a stored image for the `/media` route. Works against whichever backend is
+ * active, so links keep working after moving to Supabase Storage.
+ */
 export async function readStoredFile(segments: string[]): Promise<StoredFile | null> {
+  if (storageBackend() === "supabase") {
+    const [folder, ...rest] = segments;
+    if (!folder || rest.length === 0) return null;
+
+    try {
+      const client = await storageClient();
+      const { data, error } = await client.storage.from(bucketFor(folder)).download(rest.join("/"));
+      if (error || !data) return null;
+
+      const bytes = Buffer.from(await data.arrayBuffer());
+      if (bytes.byteLength > 10 * 1024 * 1024) return null;
+      return { bytes, contentType: contentTypeForPath(rest[rest.length - 1] ?? "") };
+    } catch {
+      return null;
+    }
+  }
+
   const target = resolveMediaPath(segments);
   if (!target) return null;
 

@@ -20,7 +20,7 @@ export async function requestPasswordResetAction(
     return { fieldErrors: { email: "Enter the email you signed up with." } };
   }
 
-  const request = createResetToken(email, (token) => `${appUrl()}/reset-password/${token}`);
+  const request = await createResetToken(email, (token) => `${appUrl()}/reset-password/${token}`);
 
   // The response is identical whether or not the account exists, so this cannot
   // be used to discover which emails are registered.

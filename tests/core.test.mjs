@@ -45,7 +45,7 @@ before(async () => {
   if ("error" in b) throw new Error(b.error);
   sellerB = b.user;
 
-  customerA = createCustomer(sellerA.id, {
+  customerA = await createCustomer(sellerA.id, {
     name: "Chinedu Eze",
     phone: "0803 123 4567",
     address: "12 Admiralty Way, Lekki",
@@ -98,24 +98,24 @@ test("sign up rejects duplicate emails and signs in correctly", async () => {
   const session = await authenticate("a@shop.ng", "password123");
   assert.equal(session?.user.id, sellerA.id);
   assert.equal(await authenticate("a@shop.ng", "wrong"), null);
-  assert.equal(findUserByEmail("a@shop.ng").business_name, "Ada Shop");
+  assert.equal((await findUserByEmail("a@shop.ng")).business_name, "Ada Shop");
 });
 
-test("customers are scoped to their seller and phones are unique per seller", () => {
+test("customers are scoped to their seller and phones are unique per seller", async () => {
   assert.equal(customerA.phone, "08031234567");
-  assert.throws(() =>
-    createCustomer(sellerA.id, { name: "Duplicate", phone: "08031234567" }),
-  );
+  await assert.rejects(async () => {
+    await createCustomer(sellerA.id, { name: "Duplicate", phone: "08031234567" });
+  });
   // Same phone under a different seller is a different customer.
-  const other = createCustomer(sellerB.id, { name: "Chinedu (B)", phone: "08031234567" });
+  const other = await createCustomer(sellerB.id, { name: "Chinedu (B)", phone: "08031234567" });
   assert.notEqual(other.id, customerA.id);
 
-  assert.equal(getCustomer(sellerB.id, customerA.id), null);
-  assert.equal(listCustomers(sellerB.id).length, 1);
+  assert.equal(await getCustomer(sellerB.id, customerA.id), null);
+  assert.equal((await listCustomers(sellerB.id)).length, 1);
 });
 
-test("orders compute totals, stay unpaid and get a readable reference", () => {
-  const order = createOrder(sellerA.id, {
+test("orders compute totals, stay unpaid and get a readable reference", async () => {
+  const order = await createOrder(sellerA.id, {
     customer: { id: customerA.id, name: customerA.name, phone: customerA.phone },
     items: [
       { description: "Black designer bag", quantity: 2, unitPriceKobo: 4500000 },
@@ -136,144 +136,160 @@ test("orders compute totals, stay unpaid and get a readable reference", () => {
   assert.equal(order.events.at(-1).type, "created");
 });
 
-test("order input is validated", () => {
-  assert.throws(
-    () =>
-      createOrder(sellerA.id, {
+test("order input is validated", async () => {
+  await assert.rejects(
+    async () => {
+      await createOrder(sellerA.id, {
         customer: { id: customerA.id, name: "x", phone: "08031234567" },
         items: [],
-      }),
+      });
+    },
     /at least one item/i,
   );
 
-  assert.throws(
-    () =>
-      createOrder(sellerA.id, {
+  await assert.rejects(
+    async () => {
+      await createOrder(sellerA.id, {
         customer: { id: customerA.id, name: "x", phone: "08031234567" },
         items: [{ description: "Bag", quantity: 0, unitPriceKobo: 100 }],
-      }),
+      });
+    },
     /whole number/i,
   );
 
-  assert.throws(
-    () =>
-      createOrder(sellerA.id, {
+  await assert.rejects(
+    async () => {
+      await createOrder(sellerA.id, {
         customer: { id: "does-not-exist", name: "x", phone: "08031234567" },
         items: [{ description: "Bag", quantity: 1, unitPriceKobo: 100 }],
-      }),
+      });
+    },
     /customer not found/i,
   );
 });
 
-test("payments move an order from unpaid to part paid to paid", () => {
-  const order = createOrder(sellerA.id, {
+test("payments move an order from unpaid to part paid to paid", async () => {
+  const order = await createOrder(sellerA.id, {
     customer: { id: customerA.id, name: customerA.name, phone: customerA.phone },
     items: [{ description: "Leather sandals", quantity: 1, unitPriceKobo: 1250000 }],
   });
 
-  const partial = recordPayment(sellerA.id, order.id, 500000);
+  const partial = await recordPayment(sellerA.id, order.id, 500000);
   assert.equal(partial.paid_kobo, 500000);
   assert.equal(partial.payment_status, "partial");
 
-  const settled = recordPayment(sellerA.id, order.id, 1000000);
+  const settled = await recordPayment(sellerA.id, order.id, 1000000);
   assert.equal(settled.paid_kobo, 1250000);
   assert.equal(settled.payment_status, "paid");
 
   // Overpayment is clamped rather than inflating the order total.
-  assert.throws(() => recordPayment(sellerA.id, order.id, 5000), /already fully paid/i);
+  await assert.rejects(async () => {
+    await recordPayment(sellerA.id, order.id, 5000);
+  }, /already fully paid/i);
 });
 
-test("order status follows the allowed transitions", () => {
-  const order = createOrder(sellerA.id, {
+test("order status follows the allowed transitions", async () => {
+  const order = await createOrder(sellerA.id, {
     customer: { id: customerA.id, name: customerA.name, phone: customerA.phone },
     items: [{ description: "Kaftan", quantity: 1, unitPriceKobo: 3200000 }],
   });
 
-  assert.throws(() => updateOrderStatus(sellerA.id, order.id, "delivered"), /cannot move to/i);
+  await assert.rejects(async () => {
+    await updateOrderStatus(sellerA.id, order.id, "delivered");
+  }, /cannot move to/i);
 
-  const confirmed = updateOrderStatus(sellerA.id, order.id, "confirmed");
+  const confirmed = await updateOrderStatus(sellerA.id, order.id, "confirmed");
   assert.equal(confirmed.status, "confirmed");
 
-  const cancelled = updateOrderStatus(sellerA.id, order.id, "cancelled");
+  const cancelled = await updateOrderStatus(sellerA.id, order.id, "cancelled");
   assert.equal(cancelled.status, "cancelled");
-  assert.throws(() => updateOrderStatus(sellerA.id, order.id, "processing"), /cannot move to/i);
+  await assert.rejects(async () => {
+    await updateOrderStatus(sellerA.id, order.id, "processing");
+  }, /cannot move to/i);
 });
 
-test("one seller can never read or mutate another seller's order", () => {
-  const order = createOrder(sellerA.id, {
+test("one seller can never read or mutate another seller's order", async () => {
+  const order = await createOrder(sellerA.id, {
     customer: { id: customerA.id, name: customerA.name, phone: customerA.phone },
     items: [{ description: "Private order", quantity: 1, unitPriceKobo: 100000 }],
   });
 
   // Reading through the wrong seller returns nothing at all.
-  assert.equal(getOrderDetail(sellerB.id, order.id), null);
+  assert.equal(await getOrderDetail(sellerB.id, order.id), null);
   assert.equal(
-    listOrders(sellerB.id).some((row) => row.id === order.id),
+    (await listOrders(sellerB.id)).some((row) => row.id === order.id),
     false,
   );
 
   // Mutations are rejected just like an RLS policy would.
-  assert.throws(() => updateOrderStatus(sellerB.id, order.id, "confirmed"), /not found/i);
-  assert.throws(() => recordPayment(sellerB.id, order.id, 1000), /not found/i);
+  await assert.rejects(async () => {
+    await updateOrderStatus(sellerB.id, order.id, "confirmed");
+  }, /not found/i);
+  await assert.rejects(async () => {
+    await recordPayment(sellerB.id, order.id, 1000);
+  }, /not found/i);
 
   // Stats are per seller too.
-  assert.equal(orderStats(sellerB.id).totalOrders, 0);
+  assert.equal((await orderStats(sellerB.id)).totalOrders, 0);
 });
 
-test("order filters and search stay inside the seller's data", () => {
-  const open = listOrders(sellerA.id, { status: "open" });
+test("order filters and search stay inside the seller's data", async () => {
+  const open = await listOrders(sellerA.id, { status: "open" });
   assert.ok(open.every((order) => order.status !== "delivered" && order.status !== "cancelled"));
 
-  const byReference = listOrders(sellerA.id, { query: open[0].reference });
+  const byReference = await listOrders(sellerA.id, { query: open[0].reference });
   assert.equal(byReference.length, 1);
   assert.equal(byReference[0].id, open[0].id);
 
-  assert.equal(listOrders(sellerA.id, { query: "nothing-matches-this" }).length, 0);
+  assert.equal((await listOrders(sellerA.id, { query: "nothing-matches-this" })).length, 0);
 });
 
-test("repeat orders reuse the customer record instead of duplicating it", () => {
-  const before = listCustomers(sellerA.id).length;
-  const reused = findOrCreateCustomer(sellerA.id, {
+test("repeat orders reuse the customer record instead of duplicating it", async () => {
+  const before = (await listCustomers(sellerA.id)).length;
+  const reused = await findOrCreateCustomer(sellerA.id, {
     name: "Chinedu Eze",
     phone: "08031234567",
     address: "New address that must not overwrite the curated one",
   });
   assert.equal(reused.id, customerA.id);
-  assert.equal(listCustomers(sellerA.id).length, before);
+  assert.equal((await listCustomers(sellerA.id)).length, before);
   // Existing curated address is preserved.
   assert.equal(reused.address, "12 Admiralty Way, Lekki");
 });
 
-test("follow-ups attach to the right seller and complete cleanly", () => {
-  const order = listOrders(sellerA.id)[0];
+test("follow-ups attach to the right seller and complete cleanly", async () => {
+  const order = (await listOrders(sellerA.id))[0];
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
 
-  const followUp = createFollowUp(sellerA.id, {
+  const followUp = await createFollowUp(sellerA.id, {
     title: "Confirm delivery",
     dueAt: yesterday.toISOString(),
     orderId: order.id,
   });
 
   assert.equal(followUp.status, "open");
-  assert.ok(followUpStats(sellerA.id).overdue >= 1);
+  assert.ok((await followUpStats(sellerA.id)).overdue >= 1);
 
-  completeFollowUp(sellerA.id, followUp.id);
-  assert.equal(listFollowUps(sellerA.id, { status: "done" }).some((f) => f.id === followUp.id), true);
-  assert.throws(() => completeFollowUp(sellerA.id, followUp.id), /not found or already closed/i);
+  await completeFollowUp(sellerA.id, followUp.id);
+  assert.equal((await listFollowUps(sellerA.id, { status: "done" })).some((f) => f.id === followUp.id), true);
+  await assert.rejects(async () => {
+    await completeFollowUp(sellerA.id, followUp.id);
+  }, /not found or already closed/i);
 
   // Overdue count drops once the item is completed.
   assert.equal(
-    listFollowUps(sellerA.id, { status: "open" }).some((f) => f.id === followUp.id),
+    (await listFollowUps(sellerA.id, { status: "open" })).some((f) => f.id === followUp.id),
     false,
   );
 
   // Another seller cannot complete it.
-  const other = createFollowUp(sellerA.id, {
+  const other = await createFollowUp(sellerA.id, {
     title: "x",
     dueAt: new Date().toISOString(),
     orderId: order.id,
   });
-  assert.throws(() => completeFollowUp(sellerB.id, other.id), /not found/i);
+  await assert.rejects(async () => {
+    await completeFollowUp(sellerB.id, other.id);
+  }, /not found/i);
 });
-

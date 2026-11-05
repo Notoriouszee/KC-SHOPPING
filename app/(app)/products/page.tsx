@@ -19,17 +19,17 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   const status = isPublicationStatus(params.status) ? params.status : "all";
   const query = (params.q ?? "").trim();
-  const shop = getShopProfile(user.id);
+  const shop = await getShopProfile(user.id);
   const origin = appUrl();
 
-  const products = listProducts(user.id, {
+  const products = await listProducts(user.id, {
     status,
     query: query || undefined,
     limit: 300,
   });
-  const stats = productStats(user.id);
+  const stats = await productStats(user.id);
   // Sharing results, shown next to the catalogue the seller manages.
-  const performance = productPerformanceMap(
+  const performance = await productPerformanceMap(
     user.id,
     products.map((product) => product.id),
   );

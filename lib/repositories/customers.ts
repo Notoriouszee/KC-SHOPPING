@@ -17,11 +17,22 @@ export type CustomerFilters = { query?: string; limit?: number };
  * Lists customers for one seller. `sellerId` is always the first argument and
  * always applied to the query — the local stand-in for an RLS `auth.uid()` check.
  */
-export function listCustomers(sellerId: string, filters: CustomerFilters = {}): CustomerWithStats[] {
+export async function listCustomers(
+  sellerId: string,
+  filters: CustomerFilters = {},
+): Promise<CustomerWithStats[]> {
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500);
   const query = filters.query?.trim();
 
-  const rows = getDb()
+  // Built conditionally: `? IS NULL` has no type for Postgres to infer.
+  const searchClause = query
+    ? "AND (LOWER(c.name) LIKE LOWER(?) OR LOWER(c.phone) LIKE LOWER(?))"
+    : "";
+  const params: (string | number)[] = query
+    ? [sellerId, `%${query}%`, `%${query}%`, limit]
+    : [sellerId, limit];
+
+  const rows = await (await getDb())
     .prepare(
       `SELECT c.*,
               (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id AND o.seller_id = c.seller_id) AS order_count,
@@ -30,36 +41,45 @@ export function listCustomers(sellerId: string, filters: CustomerFilters = {}): 
               (SELECT MAX(o.created_at) FROM orders o WHERE o.customer_id = c.id AND o.seller_id = c.seller_id) AS last_order_at
        FROM customers c
        WHERE c.seller_id = ?
-         AND (? IS NULL OR c.name LIKE ? OR c.phone LIKE ?)
+         ${searchClause}
        ORDER BY c.created_at DESC
        LIMIT ?`,
     )
-    .all(sellerId, query ?? null, `%${query ?? ""}%`, `%${query ?? ""}%`, limit);
+    .all(...params);
 
   return plainRows<CustomerWithStats>(rows);
 }
 
-export function getCustomer(sellerId: string, customerId: string): Customer | null {
-  const row = getDb()
+export async function getCustomer(
+  sellerId: string,
+  customerId: string,
+): Promise<Customer | null> {
+  const row = await (await getDb())
     .prepare("SELECT * FROM customers WHERE id = ? AND seller_id = ?")
     .get(customerId, sellerId);
   return plainRow<Customer>(row);
 }
 
-export function findCustomerByPhone(sellerId: string, phone: string): Customer | null {
+export async function findCustomerByPhone(
+  sellerId: string,
+  phone: string,
+): Promise<Customer | null> {
   const normalised = normalisePhone(phone);
   if (!normalised) return null;
-  const row = getDb()
+  const row = await (await getDb())
     .prepare("SELECT * FROM customers WHERE seller_id = ? AND phone = ?")
     .get(sellerId, normalised);
   return plainRow<Customer>(row);
 }
 
-export function createCustomer(sellerId: string, input: CustomerInput): Customer {
+export async function createCustomer(
+  sellerId: string,
+  input: CustomerInput,
+): Promise<Customer> {
   const name = requiredString(input.name, "name", "Customer name", { max: 120 });
   const phone = requirePhone(input.phone);
 
-  const existing = findCustomerByPhone(sellerId, phone);
+  const existing = await findCustomerByPhone(sellerId, phone);
   if (existing) {
     throw new ValidationError([
       { field: "phone", message: `That phone number is already saved as ${existing.name}.` },
@@ -68,7 +88,7 @@ export function createCustomer(sellerId: string, input: CustomerInput): Customer
 
   const id = newId();
   const timestamp = nowIso();
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO customers (id, seller_id, name, phone, alt_phone, address, notes, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -85,26 +105,30 @@ export function createCustomer(sellerId: string, input: CustomerInput): Customer
       timestamp,
     );
 
-  const created = getCustomer(sellerId, id);
+  const created = await getCustomer(sellerId, id);
   if (!created) throw new Error("Customer could not be created.");
   return created;
 }
 
-export function updateCustomer(sellerId: string, customerId: string, input: CustomerInput): Customer {
-  const existing = getCustomer(sellerId, customerId);
+export async function updateCustomer(
+  sellerId: string,
+  customerId: string,
+  input: CustomerInput,
+): Promise<Customer> {
+  const existing = await getCustomer(sellerId, customerId);
   if (!existing) throw new ValidationError([{ field: "id", message: "Customer not found." }]);
 
   const name = requiredString(input.name, "name", "Customer name", { max: 120 });
   const phone = requirePhone(input.phone);
 
-  const duplicate = findCustomerByPhone(sellerId, phone);
+  const duplicate = await findCustomerByPhone(sellerId, phone);
   if (duplicate && duplicate.id !== customerId) {
     throw new ValidationError([
       { field: "phone", message: `That phone number is already saved as ${duplicate.name}.` },
     ]);
   }
 
-  getDb()
+  await (await getDb())
     .prepare(
       `UPDATE customers SET name = ?, phone = ?, alt_phone = ?, address = ?, notes = ?, updated_at = ?
        WHERE id = ? AND seller_id = ?`,
@@ -120,7 +144,7 @@ export function updateCustomer(sellerId: string, customerId: string, input: Cust
       sellerId,
     );
 
-  const updated = getCustomer(sellerId, customerId);
+  const updated = await getCustomer(sellerId, customerId);
   if (!updated) throw new Error("Customer could not be updated.");
   return updated;
 }
@@ -130,12 +154,12 @@ export function updateCustomer(sellerId: string, customerId: string, input: Cust
  * customers do not fragment across orders. Only fills in blanks on the existing
  * record; never overwrites what the seller already curated.
  */
-export function findOrCreateCustomer(
+export async function findOrCreateCustomer(
   sellerId: string,
   input: { name: string; phone: string; address?: string | null },
-): Customer {
+): Promise<Customer> {
   const phone = requirePhone(input.phone);
-  const existing = findCustomerByPhone(sellerId, phone);
+  const existing = await findCustomerByPhone(sellerId, phone);
   if (existing) {
     const updates: string[] = [];
     const values: (string | null)[] = [];
@@ -149,17 +173,17 @@ export function findOrCreateCustomer(
     }
     if (updates.length > 0) {
       values.push(nowIso(), existing.id, sellerId);
-      getDb()
+      await (await getDb())
         .prepare(
           `UPDATE customers SET ${updates.join(", ")}, updated_at = ? WHERE id = ? AND seller_id = ?`,
         )
         .run(...values);
-      return getCustomer(sellerId, existing.id) ?? existing;
+      return (await getCustomer(sellerId, existing.id)) ?? existing;
     }
     return existing;
   }
 
-  return createCustomer(sellerId, {
+  return await createCustomer(sellerId, {
     name: input.name,
     phone,
     address: input.address ?? null,

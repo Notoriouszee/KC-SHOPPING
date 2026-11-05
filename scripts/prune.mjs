@@ -8,8 +8,8 @@ import { pruneAttempts } from "../lib/repositories/public-orders.ts";
 import { pruneViews } from "../lib/repositories/analytics.ts";
 import { pruneAuthAttempts } from "../lib/repositories/auth-attempts.ts";
 
-pruneAttempts();
-pruneViews();
-pruneAuthAttempts();
+await pruneAttempts();
+await pruneViews();
+await pruneAuthAttempts();
 
 console.log("Pruned expired analytics and abuse-prevention rows.");

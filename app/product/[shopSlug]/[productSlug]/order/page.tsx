@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default async function PublicOrderPage({ params }: Props) {
   const { shopSlug, productSlug } = await params;
-  const product = getPublicProduct(shopSlug, productSlug);
+  const product = await getPublicProduct(shopSlug, productSlug);
 
   if (!product) notFound();
 

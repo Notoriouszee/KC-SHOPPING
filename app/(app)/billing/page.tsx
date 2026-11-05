@@ -22,7 +22,7 @@ export default async function BillingPage({
   searchParams: Promise<{ status?: string; reference?: string; reason?: string }>;
 }) {
   const user = await requireUser();
-  const subscription = subscriptionState(user.id);
+  const subscription = await subscriptionState(user.id);
   const params = await searchParams;
 
   const amount = formatNaira(subscription.subscription.amount_kobo || planAmountKobo());

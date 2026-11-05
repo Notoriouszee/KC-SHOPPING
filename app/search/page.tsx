@@ -22,8 +22,8 @@ export default async function SearchPage({
   const { q } = await searchParams;
   const query = (q ?? "").trim();
 
-  const shops = query ? listPublicShops({ query, limit: 24 }) : [];
-  const products = query ? searchPublicProducts(query, 48) : [];
+  const shops = query ? await listPublicShops({ query, limit: 24 }) : [];
+  const products = query ? await searchPublicProducts(query, 48) : [];
   const nothing = query !== "" && shops.length === 0 && products.length === 0;
 
   return (

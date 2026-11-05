@@ -23,26 +23,26 @@ export type AdminOverview = {
   outstandingKobo: number;
 };
 
-function one(sql: string, params: unknown[] = []): number {
-  const row = getDb().prepare(sql).get(...(params as never[])) as { c: number } | undefined;
+async function one(sql: string, params: unknown[] = []): Promise<number> {
+  const row = (await (await getDb()).prepare(sql).get(...(params as never[]))) as { c: number } | undefined;
   return Number(row?.c ?? 0);
 }
 
-export function adminOverview(): AdminOverview {
+export async function adminOverview(): Promise<AdminOverview> {
   return {
-    sellers: one("SELECT COUNT(*) AS c FROM users WHERE role = 'seller' AND account_type = 'seller'"),
-    customers: one("SELECT COUNT(*) AS c FROM users WHERE account_type = 'customer'"),
-    shops: one("SELECT COUNT(*) AS c FROM users WHERE shop_slug IS NOT NULL AND account_type = 'seller'"),
-    publishedProducts: one("SELECT COUNT(*) AS c FROM products WHERE publication_status = 'published'"),
-    orders: one("SELECT COUNT(*) AS c FROM orders"),
-    pendingPayments: one(
+    sellers: await one("SELECT COUNT(*) AS c FROM users WHERE role = 'seller' AND account_type = 'seller'"),
+    customers: await one("SELECT COUNT(*) AS c FROM users WHERE account_type = 'customer'"),
+    shops: await one("SELECT COUNT(*) AS c FROM users WHERE shop_slug IS NOT NULL AND account_type = 'seller'"),
+    publishedProducts: await one("SELECT COUNT(*) AS c FROM products WHERE publication_status = 'published'"),
+    orders: await one("SELECT COUNT(*) AS c FROM orders"),
+    pendingPayments: await one(
       "SELECT COUNT(*) AS c FROM orders WHERE payment_status IN ('unpaid','partial') AND status != 'cancelled'",
     ),
-    confirmedPayments: one("SELECT COUNT(*) AS c FROM orders WHERE payment_status = 'paid'"),
-    receiptsAwaitingReview: one("SELECT COUNT(*) AS c FROM orders WHERE receipt_url IS NOT NULL AND payment_status != 'paid'"),
-    deliveriesConfirmedByCustomer: one("SELECT COUNT(*) AS c FROM orders WHERE received_confirmed_at IS NOT NULL"),
-    grossPaidKobo: one("SELECT COALESCE(SUM(paid_kobo), 0) AS c FROM orders"),
-    outstandingKobo: one(
+    confirmedPayments: await one("SELECT COUNT(*) AS c FROM orders WHERE payment_status = 'paid'"),
+    receiptsAwaitingReview: await one("SELECT COUNT(*) AS c FROM orders WHERE receipt_url IS NOT NULL AND payment_status != 'paid'"),
+    deliveriesConfirmedByCustomer: await one("SELECT COUNT(*) AS c FROM orders WHERE received_confirmed_at IS NOT NULL"),
+    grossPaidKobo: await one("SELECT COALESCE(SUM(paid_kobo), 0) AS c FROM orders"),
+    outstandingKobo: await one(
       `SELECT COALESCE(SUM(CASE WHEN payment_status IN ('unpaid','partial') AND status != 'cancelled'
                 THEN COALESCE(amount_due_online_kobo, total_kobo) - paid_kobo ELSE 0 END), 0) AS c
        FROM orders`,
@@ -74,11 +74,11 @@ export type AdminPaymentRow = {
 export type PaymentFilter = "all" | "pending" | "confirmed" | "receipts";
 
 /** Every order across every seller, for the payment/dispute view. */
-export function adminPayments(options: {
+export async function adminPayments(options: {
   filter?: PaymentFilter;
   query?: string;
   limit?: number;
-} = {}): AdminPaymentRow[] {
+} = {}): Promise<AdminPaymentRow[]> {
   const filter = options.filter ?? "all";
   const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
   const query = options.query?.trim() || null;
@@ -95,14 +95,16 @@ export function adminPayments(options: {
   }
 
   if (query) {
-    where.push("(o.reference LIKE ? OR u.shop_name LIKE ? OR u.business_name LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)");
+    where.push(
+      "(LOWER(o.reference) LIKE LOWER(?) OR LOWER(u.shop_name) LIKE LOWER(?) OR LOWER(u.business_name) LIKE LOWER(?) OR LOWER(c.name) LIKE LOWER(?) OR LOWER(c.phone) LIKE LOWER(?))",
+    );
     params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
   }
 
   const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
   return plainRows<AdminPaymentRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT o.id, o.reference, o.status, o.payment_status, o.total_kobo, o.paid_kobo,
                 o.amount_due_online_kobo, o.receipt_url, o.receipt_uploaded_at,
@@ -145,9 +147,11 @@ export type AdminOrderDetail = AdminPaymentRow & {
  * Finds one order by the reference ID customers quote in a dispute, with its
  * receipt and full timeline. Reference lookup is case-insensitive.
  */
-export function adminOrderByReference(reference: string): AdminOrderDetail | null {
+export async function adminOrderByReference(
+  reference: string,
+): Promise<AdminOrderDetail | null> {
   const row = plainRow<AdminOrderDetail>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT o.id, o.reference, o.status, o.payment_status, o.total_kobo, o.paid_kobo,
                 o.amount_due_online_kobo, o.receipt_url, o.receipt_uploaded_at,
@@ -170,10 +174,12 @@ export function adminOrderByReference(reference: string): AdminOrderDetail | nul
   if (!row) return null;
 
   const items = plainRows<OrderItem>(
-    getDb().prepare("SELECT * FROM order_items WHERE order_id = ?").all(row.id),
+    await (await getDb()).prepare("SELECT * FROM order_items WHERE order_id = ?").all(row.id),
   );
   const events = plainRows<OrderEvent>(
-    getDb().prepare("SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC").all(row.id),
+    await (await getDb())
+      .prepare("SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC")
+      .all(row.id),
   );
 
   return {
@@ -201,9 +207,9 @@ export type AdminShopRow = {
 };
 
 /** Every seller with their catalogue and sales totals, for the admin list. */
-export function adminShops(limit = 100): AdminShopRow[] {
+export async function adminShops(limit = 100): Promise<AdminShopRow[]> {
   return plainRows<AdminShopRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT u.id,
                 COALESCE(u.shop_name, u.business_name) AS shop_name,
@@ -234,9 +240,9 @@ export type AdminCustomerRow = {
   created_at: string;
 };
 
-export function adminCustomers(limit = 100): AdminCustomerRow[] {
+export async function adminCustomers(limit = 100): Promise<AdminCustomerRow[]> {
   return plainRows<AdminCustomerRow>(
-    getDb()
+    await (await getDb())
       .prepare(
         `SELECT u.id, u.owner_name, u.email, u.phone, u.created_at,
                 (SELECT COUNT(*) FROM orders o WHERE o.buyer_user_id = u.id) AS orders

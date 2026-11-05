@@ -32,22 +32,22 @@ export type ResetRequest = { token: string; resetUrl: string } | null;
  * Creates a reset token for an existing account. Returns null for unknown emails
  * so the caller can respond identically either way.
  */
-export function createResetToken(
+export async function createResetToken(
   email: string,
   buildUrl: (token: string) => string,
-): ResetRequest {
-  const user = findUserByEmail(email);
+): Promise<ResetRequest> {
+  const user = await findUserByEmail(email);
   if (!user) return null;
 
   const token = randomBytes(32).toString("hex");
   const expires = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000).toISOString();
 
   // Invalidate earlier unused tokens so only the newest link works.
-  getDb()
+  await (await getDb())
     .prepare("UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL")
     .run(nowIso(), user.id);
 
-  getDb()
+  await (await getDb())
     .prepare(
       "INSERT INTO password_resets (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
     )
@@ -62,15 +62,15 @@ export async function resetPassword(token: string, newPassword: string): Promise
   const problem = passwordProblem(newPassword);
   if (problem) return { ok: false, error: problem };
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT r.id, r.user_id, r.expires_at, r.used_at
        FROM password_resets r
        WHERE r.token_hash = ?`,
     )
-    .get(hashToken(token)) as
-    | { id: string; user_id: string; expires_at: string; used_at: string | null }
-    | undefined;
+    .get<{ id: string; user_id: string; expires_at: string; used_at: string | null }>(
+      hashToken(token),
+    );
 
   if (!row) return { ok: false, error: "That reset link is not valid." };
   if (row.used_at) return { ok: false, error: "That reset link has already been used." };
@@ -79,29 +79,24 @@ export async function resetPassword(token: string, newPassword: string): Promise
   }
 
   const passwordHash = await hashPassword(newPassword);
-  const db = getDb();
+  const db = await getDb();
 
-  db.exec("BEGIN");
-  try {
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+  await db.transaction(async (tx) => {
+    await tx.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
       passwordHash,
       nowIso(),
       row.user_id,
     );
-    db.prepare("UPDATE password_resets SET used_at = ? WHERE id = ?").run(nowIso(), row.id);
+    await tx.prepare("UPDATE password_resets SET used_at = ? WHERE id = ?").run(nowIso(), row.id);
     // Any session opened with the old password is no longer trusted.
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+    await tx.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
+  });
 
   return { ok: true };
 }
 
-export function prunePasswordResets(olderThanDays = 30): number {
+export async function prunePasswordResets(olderThanDays = 30): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-  const result = getDb().prepare("DELETE FROM password_resets WHERE created_at < ?").run(cutoff);
+  const result = await (await getDb()).prepare("DELETE FROM password_resets WHERE created_at < ?").run(cutoff);
   return Number(result.changes ?? 0);
 }

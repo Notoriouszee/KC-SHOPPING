@@ -19,13 +19,13 @@
     "db:sync:watch": "node --import ./scripts/register.mjs scripts/sync-supabase.mjs --watch"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.118.0",
-    "next": "15.5.9",
-    "pg": "^8.23.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
+  "@supabase/ssr": "^0.12.7",
+  "@supabase/supabase-js": "^2.118.0",
+  "next": "15.5.29",
+  "pg": "^8.23.1",
+  "react": "19.1.0",
+  "react-dom": "19.1.0"
+},
   "devDependencies": {
     "@types/node": "22.18.0",
     "@types/pg": "^8.23.1",

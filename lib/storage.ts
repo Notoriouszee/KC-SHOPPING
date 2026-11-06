@@ -81,7 +81,7 @@ export const IMAGE_MIME = {
 
 export type DetectedImage = { mime: keyof typeof IMAGE_MIME; extension: string };
 
-export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 
 /**
  * Detects the image type from its magic bytes. File names and browser-supplied
@@ -311,7 +311,7 @@ export async function readStoredFile(segments: string[]): Promise<StoredFile | n
       if (error || !data) return null;
 
       const bytes = Buffer.from(await data.arrayBuffer());
-      if (bytes.byteLength > 10 * 1024 * 1024) return null;
+      if (bytes.byteLength > 50 * 1024 * 1024) return null;
       return { bytes, contentType: contentTypeForPath(rest[rest.length - 1] ?? "") };
     } catch {
       return null;
@@ -323,7 +323,7 @@ export async function readStoredFile(segments: string[]): Promise<StoredFile | n
 
   try {
     const info = await stat(target);
-    if (!info.isFile() || info.size > 10 * 1024 * 1024) return null;
+    if (!info.isFile() || info.size > 50 * 1024 * 1024) return null;
     const bytes = await readFile(target);
     return { bytes, contentType: contentTypeForPath(target) };
   } catch {

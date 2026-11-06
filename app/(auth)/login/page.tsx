@@ -55,18 +55,6 @@ export default async function LoginPage({
         </Link>
       </p>
 
-      <div className="mt-8 rounded-xl border border-slate-200 bg-surface px-4 py-3 text-xs text-ink-500">
-        <p className="font-semibold text-ink-700">Demo accounts</p>
-        <p className="mt-1">
-          Seller: <span className="font-mono text-ink-900">ada@mystore.ng</span> ·{" "}
-          <span className="font-mono text-ink-900">orderpilot123</span>
-        </p>
-        <p className="mt-0.5">
-          Customer: <span className="font-mono text-ink-900">blessing@customer.ng</span> ·{" "}
-          <span className="font-mono text-ink-900">orderpilot123</span>
-        </p>
-      </div>
-
       <p className="mt-6 text-center text-sm">
         <Link href="/" className="font-semibold text-brand-700 hover:underline">
           ← Back to browsing shops

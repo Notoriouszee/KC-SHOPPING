@@ -21,10 +21,9 @@ of that foundation one milestone at a time.
 | **M9** | Public marketplace, seller/customer accounts, payment details, receipt upload, delivery on delivery | ✅ Complete |
 | **M10** | Admin area (visitors by day/month/year, dispute lookup by reference), delivery confirmation, site search, contact page, password reset | ✅ Complete |
 
-All milestones delivered. Demo: marketplace at `/`, seller at `/dashboard`,
-customer at `/account`, admin at `/admin`. Sign in with `ada@mystore.ng` (seller)
-or `blessing@customer.ng` (customer) — password `orderpilot123` for both. The
-admin account is created by the seed (see “Admin” below).
+All milestones delivered. The marketplace is at `/`, the seller dashboard at
+`/dashboard`, the customer area at `/account` and the admin area at `/admin`.
+Accounts are created through `/signup`; no credentials ship with the site.
 
 ## Deploying to Vercel
 
@@ -163,9 +162,9 @@ pnpm db:seed          # demo seller, customers, orders, follow-ups
 pnpm dev              # http://localhost:3000
 ```
 
-Demo accounts (password `orderpilot123` for both):
-- Seller — `ada@mystore.ng`
-- Customer — `blessing@customer.ng`
+`db:seed` fills the **local** SQLite database with sample sellers, customers and
+orders so screens have something to show during development. It is never run
+against production, and it prints no account credentials.
 
 Other scripts:
 

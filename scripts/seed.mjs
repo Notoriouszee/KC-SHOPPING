@@ -364,10 +364,8 @@ for (let day = 29; day >= 0; day -= 1) {
   }
 }
 
-console.log("Seeded K&C Shopping demo data.");
-console.log("  Seller:   ada@mystore.ng / orderpilot123");
-console.log("  Customer: blessing@customer.ng / orderpilot123");
-console.log(`  Admin:    ${adminEmail} / ${adminPassword}`);
+console.log("Seeded K&C Shopping local demo data.");
+console.log("  Accounts: created for local development (credentials are not printed)");
 console.log(`  Demo order awaiting receipt: ${demoCustomerOrder.reference}`);
 console.log(`  Business: ${seller.business_name}`);
 console.log(`  Shop:     /shop/${(await getShopProfile(seller.id)).shop_slug}`);

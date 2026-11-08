@@ -1,4 +1,5 @@
 import { getDb, nowIso, plainRow, plainRows } from "../db";
+import { notifyCustomerOutForDelivery } from "../email/notify";
 import { newId, orderReference } from "../domain/ids";
 import { lineTotal, sumKobo } from "../domain/money";
 import {
@@ -353,6 +354,13 @@ export async function updateOrderStatus(
     .run(status, nowIso(), orderId, sellerId);
 
   await addOrderEvent(sellerId, orderId, "status", `Status changed to ${status}.`);
+
+  // "ready" is the dispatch step in this order flow: the seller hands the parcel
+  // to the rider. The customer is told once, when it actually reaches that state.
+  if (status === "ready" && order.status !== "ready") {
+    await notifyCustomerOutForDelivery(orderId).catch(() => {});
+  }
+
   return (await getOrderDetail(sellerId, orderId))!;
 }
 

@@ -3,9 +3,16 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "../lib/auth/session";
 import { listPublicShops } from "../lib/repositories/shop";
 import { listPublishedProducts } from "../lib/repositories/products";
-import { formatNaira } from "../lib/domain/money";
+import {
+  discoverProducts,
+  newArrivals,
+  newSeed,
+  popularProducts,
+  recommendedProducts,
+} from "../lib/repositories/discovery";
 import { PublicHeader } from "../components/public-header";
 import { SiteFooter } from "../components/site-footer";
+import { ProductGrid } from "../components/product-grid";
 
 export const metadata: Metadata = {
   title: "K&C Shopping — curated elegance, discover independent shops",
@@ -35,6 +42,10 @@ function ShareIcons() {
 
 export default async function MarketplaceHomePage() {
   const user = await getCurrentUser();
+  // A new seed per visit: the arrangement differs each time, but stays stable
+  // within the visit so "load more" never repeats or skips products.
+  const seed = newSeed();
+
   const shops = await listPublicShops({ limit: 9 });
 
   const withProducts = await Promise.all(
@@ -44,7 +55,13 @@ export default async function MarketplaceHomePage() {
     })),
   );
 
-  const trending = withProducts.flatMap(({ shop, products }) => products.map((product) => ({ shop, product }))).slice(0, 4);
+  const [recommended, arrivals, popular, discovery] = await Promise.all([
+    recommendedProducts(user?.account_type === "customer" ? user.id : null, { seed, limit: 12 }),
+    newArrivals(6, seed),
+    popularProducts(6, seed),
+    discoverProducts({ seed, limit: 12 }),
+  ]);
+
   const featuredSellers = withProducts.slice(0, 2);
   const moreSellers = withProducts.slice(2, 8);
 
@@ -80,16 +97,16 @@ export default async function MarketplaceHomePage() {
               </div>
 
               <p className="mt-8 text-[11px] uppercase tracking-[0.2em] text-white/35">
-                {shops.length} shop{shops.length === 1 ? "" : "s"} · {trending.length > 0 ? "New pieces weekly" : "Opening soon"}
+                {shops.length} shop{shops.length === 1 ? "" : "s"} · {recommended.products.length > 0 ? "New pieces weekly" : "Opening soon"}
               </p>
             </div>
 
             {/* A single piece, treated like a lookbook plate. */}
             <div className="relative hidden aspect-[4/5] overflow-hidden border border-white/10 bg-surface-2 lg:block">
-              {trending[0]?.product.images?.[0] ? (
+              {recommended.products[0]?.cover_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={trending[0].product.images[0].url}
+                  src={recommended.products[0].cover_url}
                   alt=""
                   className="h-full w-full object-cover grayscale contrast-110"
                 />
@@ -98,7 +115,7 @@ export default async function MarketplaceHomePage() {
               <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="text-[10px] uppercase tracking-[0.22em] text-white/50">Featured piece</p>
                 <p className="mt-1 font-serif text-xl text-white">
-                  {trending[0]?.product.name ?? "K&C Selection"}
+                  {recommended.products[0]?.name ?? "K&C Selection"}
                 </p>
               </div>
             </div>
@@ -172,10 +189,19 @@ export default async function MarketplaceHomePage() {
           )}
         </section>
 
-        {/* Trending pieces */}
-        <section className="mx-auto max-w-[1180px] px-4 pb-16 sm:px-6">
-          <div className="flex items-end justify-between">
-            <h2 className="display text-2xl text-white sm:text-3xl">Trending Pieces</h2>
+        {/* Personalised feed, or a randomised discovery feed for guests */}
+        <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="display text-2xl text-white sm:text-3xl">
+                {recommended.personalised ? "Recommended for you" : "Discover something new"}
+              </h2>
+              <p className="mt-1 text-[12px] uppercase tracking-[0.14em] text-white/40">
+                {recommended.personalised
+                  ? "Based on what you have been looking at"
+                  : "A different arrangement on every visit"}
+              </p>
+            </div>
             <Link
               href="/collections"
               className="text-[11px] uppercase tracking-[0.16em] text-white/50 hover:text-white"
@@ -184,50 +210,62 @@ export default async function MarketplaceHomePage() {
             </Link>
           </div>
 
-          {trending.length === 0 ? (
-            <p className="mt-6 text-sm text-white/50">New pieces are on their way.</p>
-          ) : (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {trending.map(({ shop, product }) => (
-                <article key={product.id} className="product-card">
-                  <Link href={`/product/${shop.shop_slug}/${product.slug}`} className="block">
-                    <span className="block aspect-[4/5] overflow-hidden bg-neutral-100">
-                      {product.images[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={product.images[0].url}
-                          alt={product.name}
-                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
-                          loading="lazy"
-                        />
-                      ) : null}
-                    </span>
-                  </Link>
-
-                  <div className="flex items-center justify-between border-t border-neutral-200 px-3 pt-2.5">
-                    <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-neutral-500">
-                      Share this item
-                    </span>
-                    <ShareIcons />
-                  </div>
-
-                  <div className="flex items-end justify-between gap-2 px-3 pb-3 pt-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-neutral-900">{product.name}</p>
-                      <p className="text-[12px] text-neutral-500">{formatNaira(product.price_kobo)}</p>
-                    </div>
-                    <Link
-                      href={`/product/${shop.shop_slug}/${product.slug}`}
-                      className="shrink-0 border-b border-neutral-900 pb-0.5 text-[11px] font-medium text-neutral-900"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          <div className="mt-6">
+            <ProductGrid
+              products={recommended.products}
+              emptyMessage="New pieces are on their way."
+              priorityCount={4}
+            />
+          </div>
         </section>
+
+        {/* New arrivals */}
+        {arrivals.length > 0 ? (
+          <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="display text-2xl text-white sm:text-3xl">Recently added</h2>
+              <p className="text-[12px] uppercase tracking-[0.14em] text-white/40">
+                Fresh from our sellers
+              </p>
+            </div>
+            <div className="mt-6">
+              <ProductGrid products={arrivals} />
+            </div>
+          </section>
+        ) : null}
+
+        {/* Popular */}
+        {popular.length > 0 ? (
+          <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="display text-2xl text-white sm:text-3xl">Popular now</h2>
+              <p className="text-[12px] uppercase tracking-[0.14em] text-white/40">
+                Most viewed in the last 30 days
+              </p>
+            </div>
+            <div className="mt-6">
+              <ProductGrid products={popular} />
+            </div>
+          </section>
+        ) : null}
+
+        {/* A second, differently shuffled row so no seller owns the page */}
+        {discovery.length > 0 ? (
+          <section className="mx-auto max-w-[1180px] px-4 pb-16 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="display text-2xl text-white sm:text-3xl">More to explore</h2>
+              <Link
+                href="/collections"
+                className="text-[11px] uppercase tracking-[0.16em] text-white/50 hover:text-white"
+              >
+                Browse everything →
+              </Link>
+            </div>
+            <div className="mt-6">
+              <ProductGrid products={discovery} />
+            </div>
+          </section>
+        ) : null}
 
         {/* Seller call to action */}
         <section className="border-t border-line">

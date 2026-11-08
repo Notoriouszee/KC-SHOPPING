@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { getDb, nowIso, plainRow } from "../db";
+import { notifySellerNewOrder } from "../email/notify";
+import { recordActivity } from "./activity";
 import { newId, publicOrderToken } from "../domain/ids";
 import {
   MAX_PUBLIC_QUANTITY,
@@ -198,6 +200,17 @@ export async function createPublicOrder(input: PublicOrderInput): Promise<Public
   });
 
   await recordAttempt(product.id, ipHash, "accepted");
+
+  // Best effort: a notification or a tracking row must never fail the order.
+  await notifySellerNewOrder(order.id).catch(() => {});
+  if (input.buyerUserId) {
+    await recordActivity({
+      userId: input.buyerUserId,
+      kind: "purchase",
+      productId: product.id,
+      shopId: order.seller_id,
+    });
+  }
 
   return {
     orderId: order.id,

@@ -277,8 +277,9 @@ export async function createProduct(
     .prepare(
       `INSERT INTO products (
          id, seller_id, name, slug, description, price_kobo,
-         publication_status, availability, published_at, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         publication_status, availability, published_at, created_at, updated_at,
+         discovery_salt
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -292,6 +293,8 @@ export async function createProduct(
       values.publicationStatus === "published" ? timestamp : null,
       timestamp,
       timestamp,
+      // Random per product: product feeds are ordered by (salt + seed) % 1e6.
+      Math.floor(Math.random() * 1_000_000),
     );
 
   const created = await getProduct(sellerId, id);

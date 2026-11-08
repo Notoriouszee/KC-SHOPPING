@@ -16,16 +16,17 @@
     "acceptance": "node --import ./scripts/register.mjs scripts/acceptance.mjs",
     "test": "node --import ./scripts/register-tests.mjs --test --test-isolation=none --test-concurrency=1 tests/*.test.mjs",
     "db:sync": "node --import ./scripts/register.mjs scripts/sync-supabase.mjs",
-    "db:sync:watch": "node --import ./scripts/register.mjs scripts/sync-supabase.mjs --watch"
+    "db:sync:watch": "node --import ./scripts/register.mjs scripts/sync-supabase.mjs --watch",
+    "email:retry": "node --import ./scripts/register.mjs scripts/email-retry.mjs"
   },
   "dependencies": {
-  "@supabase/ssr": "^0.12.7",
-  "@supabase/supabase-js": "^2.118.0",
-  "next": "15.5.29",
-  "pg": "^8.23.1",
-  "react": "19.1.0",
-  "react-dom": "19.1.0"
-},
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
+    "next": "15.5.29",
+    "pg": "^8.23.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "devDependencies": {
     "@types/node": "22.18.0",
     "@types/pg": "^8.23.1",

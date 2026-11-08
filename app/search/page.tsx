@@ -3,9 +3,11 @@ import Link from "next/link";
 import { getCurrentUser } from "../../lib/auth/session";
 import { listPublicShops } from "../../lib/repositories/shop";
 import { searchPublicProducts } from "../../lib/repositories/products";
+import { recordActivity } from "../../lib/repositories/activity";
 import { formatNaira } from "../../lib/domain/money";
 import { PublicHeader } from "../../components/public-header";
 import { SiteFooter } from "../../components/site-footer";
+import { ProductGrid } from "../../components/product-grid";
 
 export const metadata: Metadata = {
   title: "Search shops and products",
@@ -21,6 +23,10 @@ export default async function SearchPage({
   const user = await getCurrentUser();
   const { q } = await searchParams;
   const query = (q ?? "").trim();
+
+  if (query && user?.account_type === "customer") {
+    await recordActivity({ userId: user.id, kind: "search", term: query });
+  }
 
   const shops = query ? await listPublicShops({ query, limit: 24 }) : [];
   const products = query ? await searchPublicProducts(query, 48) : [];
@@ -70,35 +76,19 @@ export default async function SearchPage({
             <h2 className="mb-3 text-lg font-semibold text-neutral-900">
               Products <span className="text-sm font-normal text-neutral-500">({products.length})</span>
             </h2>
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {products.map((product) => (
-                <li key={product.id}>
-                  <Link
-                    href={`/product/${product.shop_slug}/${product.slug}`}
-                    className="product-card"
-                  >
-                    <div className="aspect-square bg-neutral-100">
-                      {product.cover_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={product.cover_url}
-                          alt={product.name}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="p-3">
-                      <p className="line-clamp-2 text-sm font-medium text-neutral-900">{product.name}</p>
-                      <p className="mt-1 text-sm font-semibold text-neutral-900">
-                        {formatNaira(product.price_kobo)}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-neutral-500">{product.shop_name}</p>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <ProductGrid
+              products={products.map((product) => ({
+                id: product.id,
+                name: product.name,
+                slug: product.slug,
+                price_kobo: product.price_kobo,
+                shop_slug: product.shop_slug,
+                shop_name: product.shop_name,
+                cover_url: product.cover_url,
+                availability: product.availability,
+              }))}
+              priorityCount={4}
+            />
           </section>
         ) : null}
 

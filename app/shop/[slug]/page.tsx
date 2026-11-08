@@ -9,6 +9,7 @@ import { getPublicShop, resolveRetiredSlug } from "../../../lib/repositories/sho
 import { buildShopMetadata } from "../../../lib/seo";
 import { PublicHeader } from "../../../components/public-header";
 import { SiteFooter } from "../../../components/site-footer";
+import { ProductGrid } from "../../../components/product-grid";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -118,46 +119,22 @@ export default async function PublicShopPage({ params }: Props) {
               </p>
             </div>
           ) : (
-            <ul className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {products.map((product) => {
-                const cover = product.images[0];
-                const available = product.availability === "available";
-                return (
-                  <li key={product.id}>
-                    <Link href={`/product/${shop.shop_slug}/${product.slug}`} className="product-card">
-                      <span className="relative block aspect-[4/5] overflow-hidden bg-neutral-100">
-                        {cover ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={cover.url}
-                            alt={product.name}
-                            className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="flex h-full items-center justify-center text-xs text-neutral-400">
-                            No photo
-                          </span>
-                        )}
-                        {available ? null : (
-                          <span className="absolute left-2 top-2 bg-black px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-white">
-                            Sold out
-                          </span>
-                        )}
-                      </span>
-                      <span className="block px-3 py-3">
-                        <span className="block truncate text-[13px] font-medium text-neutral-900">
-                          {product.name}
-                        </span>
-                        <span className="mt-0.5 block text-[12px] text-neutral-500">
-                          {formatNaira(product.price_kobo)}
-                        </span>
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-6">
+              <ProductGrid
+                products={products.map((product) => ({
+                  id: product.id,
+                  name: product.name,
+                  slug: product.slug,
+                  price_kobo: product.price_kobo,
+                  shop_slug: shop.shop_slug,
+                  shop_name: shop.shop_name,
+                  cover_url: product.images[0]?.url ?? null,
+                  availability: product.availability,
+                }))}
+                showShop={false}
+                priorityCount={4}
+              />
+            </div>
           )}
         </section>
       </main>

@@ -31,7 +31,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   new: "New",
   confirmed: "Confirmed",
   processing: "Processing",
-  ready: "Ready",
+  ready: "Out for delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
 };

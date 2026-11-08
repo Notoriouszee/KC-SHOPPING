@@ -82,10 +82,10 @@ export default async function PublicProductPage({ params, searchParams }: Props)
           dangerouslySetInnerHTML={{ __html: productJsonLd(product) }}
         />
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
-          <div className="aspect-square w-full bg-slate-100 sm:aspect-[4/3]">
+          <div className="relative aspect-square w-full bg-white">
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={cover.url} alt={product.name} className="h-full w-full object-cover" />
+              <img src={cover.url} alt={product.name} className="absolute inset-0 h-full w-full object-contain p-4" />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-slate-400">
                 No photo yet

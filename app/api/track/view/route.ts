@@ -1,5 +1,10 @@
+import { cookies } from "next/headers";
 import { classifyViewSource } from "../../../../lib/domain/analytics";
+import { SESSION_COOKIE } from "../../../../lib/auth/session";
+import { userForSessionToken } from "../../../../lib/auth/users";
 import { hashVisitor, recordProductView } from "../../../../lib/repositories/analytics";
+import { recordActivity } from "../../../../lib/repositories/activity";
+import { getDb } from "../../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +52,27 @@ export async function POST(request: Request) {
       referrerHost,
       visitorHash: hashVisitor(ip, userAgent),
     });
+
+    // Personalisation input: only for signed-in customers, and only the product
+    // and its shop — never the visitor hash or any network detail.
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    const viewer = token ? await userForSessionToken(token) : null;
+
+    if (viewer && viewer.account_type === "customer") {
+      const product = await (await getDb())
+        .prepare("SELECT seller_id FROM products WHERE id = ?")
+        .get(productId);
+
+      const sellerId = (product as { seller_id?: string } | null)?.seller_id;
+      if (sellerId) {
+        await recordActivity({
+          userId: viewer.id,
+          kind: "view",
+          productId,
+          shopId: sellerId,
+        });
+      }
+    }
   } catch {
     // Deliberately swallowed: analytics must never break a customer's page.
   }

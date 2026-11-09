@@ -1,8 +1,18 @@
 import { ProductTile, type ProductTileData } from "./product-tile";
 
 /**
- * Responsive product grid: 2 columns on phones, 3 on small tablets, 4 on laptops
- * and 6 on wide screens. The fixed 1:1 image box keeps every row even.
+ * Marketplace grid.
+ *
+ * Column counts follow the brief:
+ *   320–639   → 2   (phones, including 320px)
+ *   640–767   → 3   (large phones / small tablets)
+ *   768–1023  → 4   (tablets, small laptops)
+ *   1024–1279 → 4   (laptops)
+ *   1280–1535 → 5   (standard desktop)
+ *   1536+     → 6   (wide desktop)
+ *
+ * `min-w-0` on each cell plus `truncate` inside the tile guarantee no horizontal
+ * overflow on narrow screens.
  */
 export function ProductGrid({
   products,
@@ -24,7 +34,7 @@ export function ProductGrid({
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-6">
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {products.map((product, index) => (
         <li key={product.id} className="min-w-0">
           <ProductTile product={product} showShop={showShop} priority={index < priorityCount} />

@@ -8,6 +8,8 @@ import { appUrl, productUrl } from "../../../../lib/config";
 import { formatNaira } from "../../../../lib/domain/money";
 import { whatsappUrl } from "../../../../lib/domain/phone";
 import { getPublicProduct } from "../../../../lib/repositories/products";
+import { newSeed, relatedProducts } from "../../../../lib/repositories/discovery";
+import { ProductGrid } from "../../../../components/product-grid";
 import { resolveRetiredSlug } from "../../../../lib/repositories/shop";
 import { buildProductMetadata, productJsonLd } from "../../../../lib/seo";
 
@@ -53,6 +55,9 @@ export default async function PublicProductPage({ params, searchParams }: Props)
     `Hi ${shop.shop_name}, I'd like to order ${product.name} (${formatNaira(product.price_kobo)}). ${shareLink}`,
   );
 
+  // Same shop first, then the same price band, shuffled per visit.
+  const related = await relatedProducts(product.id, { seed: newSeed(), limit: 6 });
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24 sm:pb-0">
       <header className="border-b border-slate-200 bg-surface">
@@ -81,11 +86,15 @@ export default async function PublicProductPage({ params, searchParams }: Props)
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: productJsonLd(product) }}
         />
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+        <div className="mx-auto w-full max-w-[440px] overflow-hidden rounded-lg border border-slate-200 bg-surface">
           <div className="relative aspect-square w-full bg-white">
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={cover.url} alt={product.name} className="absolute inset-0 h-full w-full object-contain p-4" />
+              <img
+                src={cover.url}
+                alt={product.name}
+                className="absolute inset-0 h-full w-full object-contain p-3"
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-slate-400">
                 No photo yet
@@ -94,7 +103,7 @@ export default async function PublicProductPage({ params, searchParams }: Props)
           </div>
 
           {otherImages.length > 0 ? (
-            <div className="flex gap-2 overflow-x-auto p-3">
+            <div className="flex justify-center gap-2 overflow-x-auto p-2">
               {otherImages.map((image) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -211,6 +220,34 @@ export default async function PublicProductPage({ params, searchParams }: Props)
           </p>
         </footer>
       </main>
+
+      {related.length > 0 ? (
+        <section className="border-t border-line bg-black">
+          <div className="mx-auto max-w-[1320px] px-4 py-10 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="display text-xl text-white sm:text-2xl">You may also like</h2>
+              <Link
+                href={`/shop/${shop.shop_slug}`}
+                className="text-[11px] uppercase tracking-[0.16em] text-white/50 hover:text-white"
+              >
+                More from {shop.shop_name} →
+              </Link>
+            </div>
+            <div className="mt-4">
+              <ProductGrid products={related.map((item) => ({
+                id: item.id,
+                name: item.name,
+                slug: item.slug,
+                price_kobo: item.price_kobo,
+                shop_slug: item.shop_slug,
+                shop_name: item.shop_name,
+                cover_url: item.cover_url,
+                availability: item.availability,
+              }))} />
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* Mobile action bar: reachable with one thumb, always visible. */}
       <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-surface/95 px-4 py-3 backdrop-blur sm:hidden">

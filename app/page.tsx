@@ -190,7 +190,7 @@ export default async function MarketplaceHomePage() {
         </section>
 
         {/* Personalised feed, or a randomised discovery feed for guests */}
-        <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+        <section className="mx-auto max-w-[1320px] px-4 pb-14 sm:px-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="display text-2xl text-white sm:text-3xl">
@@ -221,7 +221,7 @@ export default async function MarketplaceHomePage() {
 
         {/* New arrivals */}
         {arrivals.length > 0 ? (
-          <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+          <section className="mx-auto max-w-[1320px] px-4 pb-14 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="display text-2xl text-white sm:text-3xl">Recently added</h2>
               <p className="text-[12px] uppercase tracking-[0.14em] text-white/40">
@@ -236,7 +236,7 @@ export default async function MarketplaceHomePage() {
 
         {/* Popular */}
         {popular.length > 0 ? (
-          <section className="mx-auto max-w-[1180px] px-4 pb-14 sm:px-6">
+          <section className="mx-auto max-w-[1320px] px-4 pb-14 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="display text-2xl text-white sm:text-3xl">Popular now</h2>
               <p className="text-[12px] uppercase tracking-[0.14em] text-white/40">
@@ -251,7 +251,7 @@ export default async function MarketplaceHomePage() {
 
         {/* A second, differently shuffled row so no seller owns the page */}
         {discovery.length > 0 ? (
-          <section className="mx-auto max-w-[1180px] px-4 pb-16 sm:px-6">
+          <section className="mx-auto max-w-[1320px] px-4 pb-16 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="display text-2xl text-white sm:text-3xl">More to explore</h2>
               <Link

@@ -99,7 +99,7 @@ export default async function PublicShopPage({ params }: Props) {
           ) : null}
         </section>
 
-        <section className="mx-auto max-w-[1180px] px-4 py-12 sm:px-6">
+        <section className="mx-auto max-w-[1320px] px-4 py-12 sm:px-6">
           <div className="flex items-end justify-between">
             <h2 className="display text-2xl text-white sm:text-3xl">The pieces</h2>
             <Link

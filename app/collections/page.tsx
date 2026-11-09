@@ -40,7 +40,7 @@ export default async function CollectionsPage({
     <div className="min-h-screen bg-black">
       <PublicHeader user={user} />
 
-      <main className="mx-auto max-w-[1180px] px-4 py-14 sm:px-6">
+      <main className="mx-auto max-w-[1320px] px-4 py-14 sm:px-6">
         <p className="eyebrow">The collection</p>
         <h1 className="display mt-3 text-[34px] leading-tight text-white sm:text-[46px]">
           Every piece, in one place.

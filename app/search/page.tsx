@@ -36,7 +36,7 @@ export default async function SearchPage({
     <div className="min-h-screen bg-slate-50">
       <PublicHeader user={user} />
 
-      <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-8">
+      <main className="mx-auto w-full max-w-[1320px] px-4 pb-16 pt-8">
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
           {query ? `Results for “${query}”` : "Search"}
         </h1>

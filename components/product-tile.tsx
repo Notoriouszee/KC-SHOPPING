@@ -4,12 +4,13 @@ import { formatNaira } from "../lib/domain/money";
 /**
  * Customer-facing catalogue tile.
  *
- * Consistency is the point: every image sits in a 1:1 box with `object-contain`,
- * so portrait, landscape and transparent PNGs all occupy the same space and the
- * cards stay aligned. Cards are flex columns with the price pinned to the bottom,
- * so a one-line name and a two-line name still produce equal-height tiles.
+ * Deliberately compact, the way a real marketplace lists thousands of items: a
+ * square image well, a two-line name, a prominent price and a small shop line.
+ * Everything is sized in rem/px rather than proportionally, so the card looks the
+ * same at 2 or 6 columns and never turns into an oversized poster.
  *
- * Server component: no hooks, no client bundle cost.
+ * The image is `object-contain` on a light well: portrait, landscape, square and
+ * transparent PNGs all sit inside the same box without cropping or distortion.
  */
 
 export type ProductTileData = {
@@ -35,10 +36,10 @@ export function ProductTile({
   const soldOut = product.availability ? product.availability !== "available" : false;
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden border border-neutral-200 bg-white text-neutral-900 transition-shadow hover:shadow-md">
+    <article className="group relative flex h-full min-w-0 flex-col overflow-hidden border border-neutral-200 bg-white text-neutral-900 transition-colors hover:border-neutral-400">
       <Link
         href={`/product/${product.shop_slug}/${product.slug}`}
-        className="relative block aspect-square overflow-hidden bg-white"
+        className="relative block aspect-square w-full overflow-hidden bg-neutral-50"
         tabIndex={-1}
         aria-hidden="true"
       >
@@ -49,35 +50,36 @@ export function ProductTile({
             alt=""
             loading={priority ? "eager" : "lazy"}
             decoding="async"
-            className="absolute inset-0 h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.04]"
+            sizes="(max-width: 640px) 45vw, (max-width: 1280px) 22vw, 15vw"
+            className="absolute inset-0 h-full w-full object-contain p-1.5"
           />
         ) : (
-          <span className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-[0.14em] text-neutral-400">
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.12em] text-neutral-400">
             No photo
           </span>
         )}
 
         {soldOut ? (
-          <span className="absolute left-0 top-0 bg-black px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white">
+          <span className="absolute left-1 top-1 bg-black px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-white">
             Sold out
           </span>
         ) : null}
       </Link>
 
-      <div className="flex flex-1 flex-col gap-1 px-2.5 pb-2.5 pt-2">
+      <div className="flex flex-1 flex-col px-2 pb-2 pt-1.5">
         <Link
           href={`/product/${product.shop_slug}/${product.slug}`}
-          className="line-clamp-2 min-h-[2.5rem] text-[13px] leading-[1.25rem] text-neutral-800 hover:underline"
+          className="line-clamp-2 min-h-[30px] text-[12px] leading-[15px] text-neutral-800 hover:underline"
         >
           {product.name}
         </Link>
 
-        <p className="mt-auto text-[15px] font-semibold text-neutral-900">
+        <p className="mt-1 text-[15px] font-semibold leading-none tracking-tight text-neutral-900">
           {formatNaira(product.price_kobo)}
         </p>
 
         {showShop ? (
-          <p className="truncate text-[11px] uppercase tracking-[0.1em] text-neutral-500">
+          <p className="mt-1 truncate text-[10px] uppercase tracking-[0.08em] text-neutral-500">
             {product.shop_name}
           </p>
         ) : null}
